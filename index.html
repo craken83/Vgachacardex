@@ -148,7 +148,7 @@ const SERIES_FROM_RARITY = { "ZEVENT": "Zevent" };
 
 // ===== COLLECTIONS SUPPLÉMENTAIRES (popup + lignes des cartes) =====
 // Elles s'ajoutent aux CADRES classiques (Basique, Bêta, Shiny, Dark, Rainbow,
-// VTA25, St-Valentin, Fullart) partout : popup Vgachacardex + compteurs des cartes.
+// VTA25, St-Valentin, Fullart) partout : popup Pokecardex + compteurs des cartes.
 // "count" = nombre de numéros possibles pour cette collection.
 // Tu me donneras les correspondances exactes : ajuste les noms/count ici.
 const EXTRA_SECTIONS = [
@@ -164,7 +164,7 @@ const EXTRA_SECTIONS = [
   { name: "Maid", count: 1 },
   { name: "Signed Maid", count: 1 },
   { name: "Zevent", count: 1 },
-  { name: "Fluff Event 2026", count: 1 },
+  { name: "Fluff Event 2026", count: 3 },
   { name: "Spooky", count: 1 },
   { name: "Halloween", count: 1 },
 ];
@@ -227,19 +227,19 @@ const SECTION_CARDS_FALLBACK = {
   "Zevent": [
     "ZEVENT-Anariake", "ZEVENT-Echo Rosen", "ZEVENT-Hiwamari", "ZEVENT-KatChan",
     "ZEVENT-Keola", "ZEVENT-Lalou_Pissenlit", "ZEVENT-Manaryuujin", "ZEVENT-Meloka",
-    "ZEVENT-Miel Crapouille", "ZEVENT-Natsuko", "ZEVENT-NellyNessa", "ZEVENT-Niiior",
+    "ZEVENT-Miel Crapouille", "ZEVENT-Natsuko", "ZEVENT-NellyNessa", "ZEVENT-Niioor",
     "ZEVENT-Okanyaan_", "ZEVENT-Shinya_nia", "ZEVENT-Skerax", "ZEVENT-Volpoune",
     "ZEVENT-Sheiyah Sorai", "ZEVENT-Mellumine", "ZEVENT-MiiOrca", "ZEVENT-StanRenart",
     "ZEVENT-Sol_Hms", "ZEVENT-Nia"
   ],
   "Fluff Event 2026": [
-    "AliceXIV", "Ashley Plateada", "AshySlashii", "Asphalte", "Aurenn Dwargon",
+    "AliiceXIV", "Ashley Plateada", "AshySlashii", "Asphalte", "Aurenn Dwargon",
     "BloodyLua", "BooClef", "Doryl", "Egloo", "Emadeus", "SuneeToo", "Fengaryx",
     "Harushuna", "Hilda Mist", "Hiwamari", "Lily", "Malidoudou", "Manaryuujin",
     "Melibellule", "Miss Flamme", "Moe Memuri", "Naekoly", "Oishii",
     "Okamiartfurry", "PokeFey_", "Ponoki", "Shinya_nia", "Sillica", "TakuDev",
     "UnePlanteEnPot", "Volpoune", "Wicked Fox", "Yhusky", "Yuka Portesonges",
-    "Yuuki_vt", "Mire_by", "RomanyHunH", "nixy_vt", "Loona", "Mikenlos",
+    "Yuuki_vt", "Mire_by", "RomanyHunh", "nixy_vt", "Loona", "Mikenlos",
     "MissJabu", "TheSandWraith", "Mevolie", "StanRenart", "LeChatOo",
     "Araesha", "Aquakwa", "Masaki_Fujiwara", "AmeAndGrimm", "Gulliana_VT",
     "Pamiette", "Atlasunderscor", "LilithBlahaj", "Nallena_Vwolf", "Skinekko",
@@ -249,7 +249,7 @@ const SECTION_CARDS_FALLBACK = {
     "SPOOKY-Aoi Nipi", "SPOOKY-Asphalte", "SPOOKY-BloodyLua", "SPOOKY-Diedora",
     "SPOOKY-Hestya Unicorn", "SPOOKY-Keola", "SPOOKY-Kikitchiwi", "SPOOKY-Mellumine",
     "SPOOKY-Micku", "SPOOKY-Nimilith", "SPOOKY-Ookaman", "SPOOKY-Pinkaiii",
-    "SPOOKY-RomanyHunH", "SPOOKY-Shao_pix", "SPOOKY-Sheiyah Sorai", "SPOOKY-Skirona",
+    "SPOOKY-RomanyHunh", "SPOOKY-Shao_pix", "SPOOKY-Sheiyah Sorai", "SPOOKY-Skirona",
     "SPOOKY-Sol_Hms", "SPOOKY-Ashley Plateada", "SPOOKY-Hana Momiji", "SPOOKY-Miel Crapouille",
     "SPOOKY-Ryushi", "SPOOKY-Ames", "SPOOKY-Ankorisu -Ayako-", "SPOOKY-Chose Crevette",
     "SPOOKY-Kamiye", "SPOOKY-Hiwamari", "SPOOKY-Manaryuujin", "SPOOKY-Pawa",
@@ -269,6 +269,20 @@ const sectionApplies = (section, cardName) => {
   const allowed = SECTION_CARD_KEYS[section];
   return !allowed || allowed.has(normKey(cardName));
 };
+
+// ===== SECTIONS PORTANT LES NUMÉROS D'UNE SÉRIE =====
+// Pour savoir si une carte a "au moins un numéro dans la série X", on regarde
+// les sections qui portent les numéros de cette série. Par défaut : la série
+// elle-même + sa déclinaison "Signed …".
+const SERIES_SECTIONS = {
+  "Base": ["Basique", "Bêta", "Shiny", "Dark", "Rainbow"],
+  "VTA 2025": ["VTA25"],
+  "Saint-Valentin": ["St-Valentin"],
+  "Zevent": ["Zevent"],
+  "Fluff Event 2026": ["Fluff Event 2026"],
+  "Spooky": ["Spooky"]
+};
+const seriesSections = (label) => SERIES_SECTIONS[label] || [label, "Signed " + label];
 
 // ===== LISTE UNIFIÉE (une seule "db") =====
 // Toutes les versions d'une même carte (ex. "Ankorisu -Ayako-", "UR-Ankorisu
@@ -474,7 +488,7 @@ function Collection() {
   const [serieFilter, setSerieFilter] = useState(null); // série filtrée (null = toutes)
   const [showOnlyOwned, setShowOnlyOwned] = useState(false); // masquer les cartes vierges
   const [state, setState] = useState(loadState);
-  const [vgachadexCard, setvgachadexCard] = useState(null);
+  const [pokedexCard, setPokedexCard] = useState(null);
   const modalRef = useRef(null);
 
   const stateRef = useRef(state);
@@ -495,9 +509,9 @@ function Collection() {
   const [sentinel, setSentinel] = useState(null);
 
   useEffect(() => {
-    document.body.style.overflow = vgachadexCard ? "hidden" : "";
+    document.body.style.overflow = pokedexCard ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
-  }, [vgachadexCard]);
+  }, [pokedexCard]);
 
   const closeModal = () => {
     if (modalRef.current) {
@@ -599,7 +613,7 @@ function Collection() {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') { closeModal(); setvgachadexCard(null); }
+      if (e.key === 'Escape') { closeModal(); setPokedexCard(null); }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -629,7 +643,16 @@ function Collection() {
     return { total, owned };
   }, [state]);
 
-  // Liste filtrée : rareté + série + recherche + masquage des vierges
+  // Une carte a-t-elle au moins un numéro obtenu dans les sections d'une série ?
+  const hasNumbersInSeries = useCallback((cardName, label) => {
+    const st = state[cardName];
+    if (!st) return false;
+    return seriesSections(label).some(sec => Array.isArray(st[sec]) && st[sec].length > 0);
+  }, [state]);
+
+  // Liste filtrée : rareté + série + recherche + masquage des vierges.
+  // Avec un filtre de série actif, "masquer les vierges" masque les cartes
+  // n'ayant aucun numéro obtenu DANS CETTE SÉRIE (pas juste "vierges en tout").
   const ownedDep = showOnlyOwned ? ownedNames : null;
   const cards = useMemo(() => {
     const q = dSearch.trim().toLowerCase();
@@ -637,10 +660,14 @@ function Collection() {
       if (q && !r.lower.includes(q)) return false;
       if (rarityFilter && !r.rarities.includes(rarityFilter)) return false;
       if (serieFilter && !r.series.includes(serieFilter)) return false;
-      if (showOnlyOwned && !ownedNames.has(r.name)) return false;
+      if (showOnlyOwned) {
+        if (serieFilter) {
+          if (!hasNumbersInSeries(r.name, serieFilter)) return false;
+        } else if (!ownedNames.has(r.name)) return false;
+      }
       return true;
     });
-  }, [dSearch, rarityFilter, serieFilter, showOnlyOwned, ownedDep]);
+  }, [dSearch, rarityFilter, serieFilter, showOnlyOwned, ownedDep, hasNumbersInSeries]);
 
   // Chargement progressif : on repart de la 1re page quand les filtres changent
   useEffect(() => { setLimit(PAGE); }, [dSearch, rarityFilter, serieFilter, showOnlyOwned]);
@@ -672,16 +699,17 @@ function Collection() {
       .map(([key, value]) => ({ key, total: value.total, owned: value.owned }));
   }, [ownedNames, serieFilter]);
 
-  // Stats des chips de série (en tenant compte du filtre rareté actif)
+  // Stats des chips de série (en tenant compte du filtre rareté actif).
+  // "owned" ne compte que les cartes ayant AU MOINS UN numéro obtenu
+  // dans les sections de cette série (pas juste "quelque chose quelque part").
   const seriesStats = useMemo(() => {
     const counts = new Map(); // série -> { total, owned }
     ALL_CARDS.forEach(c => {
       if (rarityFilter && !c.rarities.includes(rarityFilter)) return;
-      const owned = ownedNames.has(c.name);
       c.series.forEach(label => {
         const item = counts.get(label) || { total: 0, owned: 0 };
         item.total++;
-        if (owned) item.owned++;
+        if (hasNumbersInSeries(c.name, label)) item.owned++;
         counts.set(label, item);
       });
     });
@@ -690,7 +718,7 @@ function Collection() {
       .filter(([label]) => !HIDDEN_SERIES_BUTTONS.has(label))
       .sort((a, b) => (SERIES_ORDER_INDEX.get(a[0]) ?? SERIES_ORDER.length) - (SERIES_ORDER_INDEX.get(b[0]) ?? SERIES_ORDER.length))
       .map(([label, value]) => ({ label, total: value.total, owned: value.owned }));
-  }, [ownedNames, rarityFilter]);
+  }, [hasNumbersInSeries, rarityFilter]);
 
   // Callbacks à identité stable (sinon React.memo ne servirait à rien)
   // (onToggle retiré : Card ne l'utilisait pas, la popup appelle toggleVariant directement)
@@ -698,7 +726,7 @@ function Collection() {
   const onAdd = useCallback((...a) => addRef.current(...a), []);
   const removeRef = useRef(); removeRef.current = removeCustomVariant;
   const onRemove = useCallback((...a) => removeRef.current(...a), []);
-  const onOpen = setvgachadexCard;
+  const onOpen = setPokedexCard;
 
   // ===== Fichier de progression : export / import / fichier lié =====
   const importRef = useRef(null);
@@ -741,11 +769,11 @@ function Collection() {
   const totalVariants = (cardName) => sectionsInfo(cardName).total;
   const ownedVariants = (cardName) => countOwned(state[cardName], sectionsInfo(cardName).sections);
 
-  // ===== POPUP VgachaCARDEX =====
+  // ===== POPUP POKECARDEX =====
   // Infos (tags de rareté + séries) d'une carte fusionnée
   const cardInfo = (cardName) => CARD_BY_NORM.get(normKey(cardName)) || { rarities: [], displayRarities: [], series: [] };
 
-  const renderVgachacardex = (cardName) => {
+  const renderPokecardex = (cardName) => {
     if (!cardName) return null;
     const cardState = state[cardName] || {};
     const info = cardInfo(cardName);
@@ -754,9 +782,9 @@ function Collection() {
     const pct = total > 0 ? Math.round(owned / total * 100) : 0;
     return (
       <div className="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-start justify-center z-50 overflow-y-auto p-4"
-           onClick={(e) => { if (e.target === e.currentTarget) setvgachadexCard(null); }}>
+           onClick={(e) => { if (e.target === e.currentTarget) setPokedexCard(null); }}>
         <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-3xl my-8 p-5 relative shadow-2xl">
-          <button onClick={() => setvgachadexCard(null)}
+          <button onClick={() => setPokedexCard(null)}
             className="absolute top-3 right-3 text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
           <h2 className="text-xl font-bold text-white mb-2 flex flex-wrap items-center gap-2">
             Collection de <span className="text-indigo-400">{cardName}</span>
@@ -1003,6 +1031,7 @@ function Collection() {
         <div className="mb-4 text-sm text-slate-400">
           <span className="text-emerald-400 font-semibold">{cards.reduce((count, card) => count + (ownedNames.has(card.name) ? 1 : 0), 0)}</span>
           {" "}/ {cards.length} cartes affichées avec variantes
+          {" "}<span className="text-slate-500">— {ALL_CARDS.length} cartes au total dans la collection</span>
           {" "}<span className="text-slate-500">— <span className="text-cyan-300 font-semibold">{globalNumbers.owned}</span> / {globalNumbers.total} numéros de cartes au total</span>
         </div>
 
@@ -1023,14 +1052,14 @@ function Collection() {
 
         <p className="text-xs text-slate-500 mt-4">
           <strong>Instructions:</strong><br/>
-          - Clique sur un pseudo pour ouvrir sa vue Vgachacardex (possédées en couleur, manquantes en grisé)<br/>
+          - Clique sur un pseudo pour ouvrir sa vue Pokecardex (possédées en couleur, manquantes en grisé)<br/>
           - Sur chaque carte : "Basique 10/137" = numéros obtenus / total possibles pour ce cadre<br/>
           - Clique sur un tag pour le supprimer, sur + pour ajouter un numéro<br/>
           - Ta progression est sauvegardée automatiquement (même clé que l'ancienne version : tes données sont conservées)
         </p>
       </div>
 
-      {renderVgachacardex(vgachadexCard)}
+      {renderPokecardex(pokedexCard)}
     </div>
   );
 }
