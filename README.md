@@ -13,7 +13,7 @@ et certain nom on de possible erreur de frappe qui seront corrigés sous peu.
 ## Les données
   * Elle sont stockées en local sur votre navigateur donc vous n'etes pas obliger d'installer l'application
      * cependant si vous ouvrez une premiere fois sur Chrome puis passe sur Firefox les donner ne seront pas transmise.
-  * Vous pouvais aussi les importer ou exporter via le menu burger en haut a droite (les 3 barres horizontals).
+  * Vous pouvais donc les importer ou exporter via le menu burger en haut a droite (les 3 barres horizontals).
 
 ## Panel Admin
 Son utilité est pour ce qui telecharge l'app 
