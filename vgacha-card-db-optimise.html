@@ -1,0 +1,1451 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>VGacha — Collection &amp; Admin</title>
+  <!-- Optimisation : cartes mémoïsées, rendu progressif, caches de sections, recherche différée, sauvegarde différée. -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>[data-jsx] { display: contents; }</style>
+</head>
+<body>
+  <div id="root"></div>
+  <!-- DONNÉES : fichier vgacha-db.js (dans le même dossier) -->
+  <script src="vgacha-db.js"></script>
+  <!-- PROGRESSION (optionnel) : vgacha-progression.js, même dossier. Chargé automatiquement. -->
+  <script src="vgacha-progression.js" onerror="void 0"></script>
+  <script type="text/babel">
+const { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue, memo } = React;
+
+// Retire les préfixes de rareté des noms de cartes
+// ("UR-Ankorisu -Ayako-" -> "Ankorisu -Ayako-")
+const stripRarityPrefix = (n) =>
+  n.replace(/^(SSR|SR|UR2|UR|SEC2|SEC|ZEVENT|SPOOKY)-/i, "").trim();
+// Clé de fusion : sans préfixe, minuscules, "_" traité comme espace
+// ("SR-Yami_Shin" et "SSR-Yami Shin" -> "yami shin" = même personne)
+const normKey = (n) => stripRarityPrefix(n).toLowerCase().replace(/_/g, " ");
+
+// ===== FICHIER DE PROGRESSION (sauvegarde externe) =====
+let linkedHandle = null; // fichier lié (File System Access API, Chrome/Edge)
+const writeLinked = async (s) => {
+  if (!linkedHandle) return;
+  try {
+    const w = await linkedHandle.createWritable();
+    await w.write(toProgressFile(s));
+    await w.close();
+  } catch (e) {}
+};
+// Fusionne deux états sans rien perdre (union des numéros)
+const mergeStates = (a, b) => {
+  const out = { ...a };
+  Object.entries(b || {}).forEach(([card, secs]) => {
+    const cur = { ...(out[card] || {}) };
+    Object.entries(secs || {}).forEach(([sec, nums]) => {
+      if (!Array.isArray(nums) || !nums.length) return;
+      cur[sec] = [...new Set([...(cur[sec] || []), ...nums])].sort((x, y) => x - y);
+    });
+    if (Object.keys(cur).length) out[card] = cur;
+  });
+  return out;
+};
+const PROGRESS_PREFIX = /^\s*window\.VGACHA_PROGRESSION\s*=\s*/;
+const parseProgress = (text) => JSON.parse(text.replace(PROGRESS_PREFIX, "").replace(/;\s*$/, ""));
+const toProgressFile = (s) => "window.VGACHA_PROGRESSION = " + JSON.stringify(s, null, 1) + ";\n";
+function loadState() {
+  // 1) le navigateur (localStorage) ; 2) à défaut, vgacha-progression.js
+  try {
+    const raw = localStorage.getItem("vgacha-tags-toutes-les-cartes");
+    if (raw) {
+      const s = migrateState(JSON.parse(raw));
+      if (Object.keys(s).length) return s;
+    }
+  } catch (e) {}
+  try {
+    if (window.VGACHA_PROGRESSION) return migrateState(window.VGACHA_PROGRESSION);
+  } catch (e) {}
+  return {};
+}
+function migrateState(saved) {
+  try {
+    // MIGRATION : fusionne les clés (préfixées ou non) dans la carte fusionnée
+    // (nom sans préfixe), en respectant le nom d'affichage exact.
+    // Les numéros sont cumulés sans doublon.
+    const migrated = {};
+    const target = (key) => {
+      if (typeof DISPLAY_BY_NORM !== "undefined") {
+        const display = DISPLAY_BY_NORM.get(normKey(key));
+        if (display) return display;
+      }
+      return stripRarityPrefix(key);
+    };
+    Object.entries(saved).forEach(([key, val]) => {
+      const canon = target(key);
+      if (!migrated[canon]) migrated[canon] = {};
+      Object.entries(val || {}).forEach(([cadre, nums]) => {
+        if (!Array.isArray(nums) || nums.length === 0) return;
+        // Les anciennes raretés ZEVENT deviennent des séries :
+        // leurs numéros migrent vers les sections correspondantes.
+        let dest = cadre;
+        if (cadre === "R:ZEVENT") dest = "Zevent";
+        else if (cadre === "R:Fullart") dest = "Fullart";
+        const prev = migrated[canon][dest] || [];
+        migrated[canon][dest] = [...new Set([...prev, ...nums])].sort((a, b) => a - b);
+      });
+    });
+    return migrated;
+  } catch (e) { return {}; }
+}
+
+function saveState(s) {
+  try {
+    localStorage.setItem("vgacha-tags-toutes-les-cartes", JSON.stringify(s));
+  } catch (e) {}
+}
+
+const CADRE_BORDER = {
+  "Basique": "#2563eb",
+  "Bêta": "#9333ea",
+  "Shiny": "#facc15",
+  "Dark": "#374151",
+  "Rainbow": "#ef4444",
+  "VTA25": "#16a34a",
+  "St-Valentin": "#db2777",
+  "Fullart": "#14b8a6",
+  "GraVty": "#0ea5e9",
+  "Signed Fullart": "#2dd4bf",
+  "Eikyuu Hours": "#a78bfa",
+  "Eikyuu Hours Signed": "#c084fc",
+  "Signed GraVty": "#38bdf8",
+  "Blue & Gold": "#f59e0b",
+  "Signed Blue & Gold": "#fbbf24",
+  "Vecordia": "#ec4899",
+  "Signed Vecordia": "#f472b6",
+  "Maid": "#8b5cf6",
+  "Signed Maid": "#a78bfa",
+  "Zevent": "#eab308",
+  "Fluff Event 2026": "#fda4af",
+  "Spooky": "#a855f7",
+  "Halloween": "#ea580c"
+};
+
+// Index normalisés pré-calculés : évite de reparcourir les listes à chaque rendu.
+const FULLART_KEYS = new Set((FILTRES["Fullart"] || []).map(normKey));
+const isFullartCard = (name) => FULLART_KEYS.has(normKey(name));
+
+// ===== FILTRES PAR SÉRIE =====
+// D'après vgacha-db.js : une const FILTRES { "Nom de série": [cartes] }.
+// Une carte peut être dans plusieurs listes. Les séries emoji restent
+// "à identifier" et gardent leur emoji comme libellé de filtre.
+const SERIES_ORDER = Object.keys(typeof FILTRES !== "undefined" ? FILTRES : {});
+const SERIES_ORDER_INDEX = new Map(SERIES_ORDER.map((label, index) => [label, index]));
+const HIDDEN_SERIES_BUTTONS = new Set(["Base", "Saint-Valentin"]);
+// Raretés traitées comme SÉRIES (pas de chip Rareté pour elles) :
+// ZEVENT devient "Zevent". (Fullart est une série normale,
+// définie uniquement dans FILTRES comme Fluff Event, Maid, etc.)
+const SERIES_FROM_RARITY = { "ZEVENT": "Zevent" };
+
+// ===== COLLECTIONS SUPPLÉMENTAIRES (popup + lignes des cartes) =====
+// Elles s'ajoutent aux CADRES classiques (Basique, Bêta, Shiny, Dark, Rainbow,
+// VTA25, St-Valentin, Fullart) partout : popup Vgachacardex + compteurs des cartes.
+// "count" = nombre de numéros possibles pour cette collection.
+// Tu me donneras les correspondances exactes : ajuste les noms/count ici.
+const EXTRA_SECTIONS = [
+  { name: "GraVty", count: 1 },
+  { name: "Signed Fullart", count: 1 },
+  { name: "Eikyuu Hours", count: 1 },
+  { name: "Eikyuu Hours Signed", count: 1 },
+  { name: "Signed GraVty", count: 1 },
+  { name: "Blue & Gold", count: 1 },
+  { name: "Signed Blue & Gold", count: 1 },
+  { name: "Vecordia", count: 1 },
+  { name: "Signed Vecordia", count: 1 },
+  { name: "Maid", count: 1 },
+  { name: "Signed Maid", count: 1 },
+  { name: "Zevent", count: 1 },
+  { name: "Fluff Event 2026", count: 1 },
+  { name: "Spooky", count: 1 },
+  { name: "Halloween", count: 1 },
+];
+// Toutes les sections affichées (cadres classiques + collections supplémentaires)
+const ALL_SECTIONS = [...CADRES, ...EXTRA_SECTIONS.map(e => e.name)];
+// Nombre de numéros possibles pour une section
+const EXTRA_SECTION_COUNTS = new Map(EXTRA_SECTIONS.map(({ name, count }) => [name, count]));
+const sectionCount = (name) =>
+  VARIANTES_COUNT[name] !== undefined
+    ? VARIANTES_COUNT[name]
+    : EXTRA_SECTION_COUNTS.get(name) || 1;
+
+// ===== CARTES ÉLIGIBLES PAR COLLECTION =====
+// Comme FILTRES["Fullart"] : ces collections n'existent que pour les cartes listées.
+// Pour les autres cartes, la section affiche "—".
+const SECTION_CARDS_FALLBACK = {
+  "VTA25": [
+    "Aurenn Dwargon", "KatChan", "MiiOrca", "OkPlonk", "StanRenart", "Miel Crapouille"
+  ],
+  "Eikyuu Hours": [
+    "UR-Chu", "UR-Manaryuujin", "UR-Aoi Nipi", "UR-Hana Momiji", "UR-Lazurine"
+  ],
+  "GraVty": [
+    "UR-Aquakwa", "UR-Chowco", "UR-Kokoa_Nemuzuki", "UR-Vega"
+  ],
+  "Signed Fullart": [
+    "SSR-Yami Shin", "SSR-Ryushi", "SSR-Hana Momiji", "SSR-Hiwamari", "SSR-Xen Acedia",
+    "SSR-AngeCeleste", "SSR-Yhusky", "SSR-Sheiyah Sorai", "SSR-Keola",
+    "SSR-Miel Crapouille", "SSR-Elyxia", "SSR-Niyonko", "SSR-Numia__",
+    "SSR-KatChan", "SSR-Amelyas Addams"
+  ],
+  "Eikyuu Hours Signed": [
+    "SEC-Aoi Nipi", "SEC-Chu", "SEC-Hana Momiji", "SEC-Lazurine", "SEC-Manaryuujin"
+  ],
+  "Signed GraVty": [
+    "SEC-Aquakwa", "SEC-Chowco", "SEC-Kokoa_Nemuzuki", "SEC-Vega"
+  ],
+  "Blue & Gold": [
+    "UR-Ankorisu -Ayako-", "UR-Kathsuki", "UR-SuneeToo"
+  ],
+  "Signed Blue & Gold": [
+    "SEC-Ankorisu -Ayako-", "SEC-Kathsuki", "SEC-SuneeToo"
+  ],
+  "Vecordia": [
+    "UR-Asphalte", "UR-BooClef", "UR-Oishii", "UR-UnePlanteEnPot"
+  ],
+  "Signed Vecordia": [
+    "SEC-Asphalte", "SEC-BooClef", "SEC-Oishii", "SEC-UnePlanteEnPot"
+  ],
+  "Maid": [
+    "UR-Aizu", "UR2-Aoi Nipi", "UR-Araesha", "UR2-Chu", "UR-Echo Rosen",
+    "UR-Flower Hearthmind", "UR2-Hana Momiji", "UR-Nisumi", "UR-Niyonko",
+    "UR-reiru", "UR-Ryushi", "UR-Spica Stellaris", "UR2-UnePlanteEnPot", "UR-Yuki"
+  ],
+  "Signed Maid": [
+    "SEC-Aizu", "SEC2-Aoi Nipi", "SEC-Araesha", "SEC2-Chu", "SEC-Echo Rosen",
+    "SEC-Flower Hearthmind", "SEC2-Hana Momiji", "SEC-Nisumi", "SEC-Niyonko",
+    "SEC-reiru", "SEC-Ryushi", "SEC-Spica Stellaris", "SEC2-UnePlanteEnPot", "SEC-Yuki"
+  ],
+  "Zevent": [
+    "ZEVENT-Anariake", "ZEVENT-Echo Rosen", "ZEVENT-Hiwamari", "ZEVENT-KatChan",
+    "ZEVENT-Keola", "ZEVENT-Lalou_Pissenlit", "ZEVENT-Manaryuujin", "ZEVENT-Meloka",
+    "ZEVENT-Miel Crapouille", "ZEVENT-Natsuko", "ZEVENT-NellyNessa", "ZEVENT-Niiior",
+    "ZEVENT-Okanyaan_", "ZEVENT-Shinya_nia", "ZEVENT-Skerax", "ZEVENT-Volpoune",
+    "ZEVENT-Sheiyah Sorai", "ZEVENT-Mellumine", "ZEVENT-MiiOrca", "ZEVENT-StanRenart",
+    "ZEVENT-Sol_Hms", "ZEVENT-Nia"
+  ],
+  "Fluff Event 2026": [
+    "AliceXIV", "Ashley Plateada", "AshySlashii", "Asphalte", "Aurenn Dwargon",
+    "BloodyLua", "BooClef", "Doryl", "Egloo", "Emadeus", "SuneeToo", "Fengaryx",
+    "Harushuna", "Hilda Mist", "Hiwamari", "Lily", "Malidoudou", "Manaryuujin",
+    "Melibellule", "Miss Flamme", "Moe Memuri", "Naekoly", "Oishii",
+    "Okamiartfurry", "PokeFey_", "Ponoki", "Shinya_nia", "Sillica", "TakuDev",
+    "UnePlanteEnPot", "Volpoune", "Wicked Fox", "Yhusky", "Yuka Portesonges",
+    "Yuuki_vt", "Mire_by", "RomanyHunH", "nixy_vt", "Loona", "Mikenlos",
+    "MissJabu", "TheSandWraith", "Mevolie", "StanRenart", "LeChatOo",
+    "Araesha", "Aquakwa", "Masaki_Fujiwara", "AmeAndGrimm", "Gulliana_VT",
+    "Pamiette", "Atlasunderscor", "LilithBlahaj", "Nallena_Vwolf", "Skinekko",
+    "Numia__", "Lumi_Pomme", "Nia", "SuneeToo"
+  ],
+  "Spooky": [
+    "SPOOKY-Aoi Nipi", "SPOOKY-Asphalte", "SPOOKY-BloodyLua", "SPOOKY-Diedora",
+    "SPOOKY-Hestya Unicorn", "SPOOKY-Keola", "SPOOKY-Kikitchiwi", "SPOOKY-Mellumine",
+    "SPOOKY-Micku", "SPOOKY-Nimilith", "SPOOKY-Ookaman", "SPOOKY-Pinkaiii",
+    "SPOOKY-RomanyHunH", "SPOOKY-Shao_pix", "SPOOKY-Sheiyah Sorai", "SPOOKY-Skirona",
+    "SPOOKY-Sol_Hms", "SPOOKY-Ashley Plateada", "SPOOKY-Hana Momiji", "SPOOKY-Miel Crapouille",
+    "SPOOKY-Ryushi", "SPOOKY-Ames", "SPOOKY-Ankorisu -Ayako-", "SPOOKY-Chose Crevette",
+    "SPOOKY-Kamiye", "SPOOKY-Hiwamari", "SPOOKY-Manaryuujin", "SPOOKY-Pawa",
+    "SPOOKY-Misterlapino", "SPOOKY-Rosalice", "SPOOKY-Sodalithe", "SPOOKY-stinkycatsy",
+    "SPOOKY-Noryah", "SPOOKY-Nishibi", "SPOOKY-Shiho Litchi"
+  ]
+};
+// Les sections viennent de vgacha-db.js (SECTIONS_DB, éditable dans vgacha-admin.html) ; la liste ci-dessus sert de secours.
+const SECTION_CARDS = (typeof SECTIONS_DB !== "undefined") ? SECTIONS_DB : SECTION_CARDS_FALLBACK;
+// Une section s'affiche pour cette carte si elle n'a pas de liste restreinte
+// (ou si la carte en fait partie) — comparaison normalisée (sans préfixe,
+// minuscules, "_" = espace) pour tenir compte de la fusion des versions
+const SECTION_CARD_KEYS = Object.fromEntries(
+  Object.entries(SECTION_CARDS).map(([section, names]) => [section, new Set(names.map(normKey))])
+);
+const sectionApplies = (section, cardName) => {
+  const allowed = SECTION_CARD_KEYS[section];
+  return !allowed || allowed.has(normKey(cardName));
+};
+
+// ===== LISTE UNIFIÉE (une seule "db") =====
+// Toutes les versions d'une même carte (ex. "Ankorisu -Ayako-", "UR-Ankorisu
+// -Ayako-", "SEC-Ankorisu -Ayako-") sont regroupées en UNE seule carte qui
+// cumule ses tags de rareté. Les préfixes UR-, SEC-, SSR-, SR-, UR2-, SEC2-,
+// ZEVENT- sont retirés du pseudo et transformés en tag.
+// ZEVENT devient une SÉRIE (pas une rareté) : ses
+// cartes sont ajoutées au chip Série correspondant,
+// fusionnées avec les cartes qui y étaient déjà via leur code de série.
+const ALL_CARDS = (() => {
+  const map = new Map(); // clé = pseudo normalisé (sans préfixe, minuscules, _ = espace)
+  // Index inverse série -> noms normalisés, construit une seule fois.
+  const seriesByKey = new Map();
+  Object.entries(FILTRES).forEach(([label, names]) => names.forEach(name => {
+    const key = normKey(name);
+    if (!seriesByKey.has(key)) seriesByKey.set(key, []);
+    seriesByKey.get(key).push(label);
+  }));
+  GROUPS.forEach(g => g.cards.forEach(n => {
+    const canon = stripRarityPrefix(n);
+    const key = normKey(canon);
+    let e = map.get(key);
+    if (!e) {
+      e = { name: canon, lower: canon.toLowerCase(), series: [], rarities: [] };
+      map.set(key, e);
+    }
+    // Séries récupérées directement depuis l'index pré-calculé.
+    (seriesByKey.get(key) || []).forEach(label => {
+      if (!e.series.includes(label)) e.series.push(label);
+    });
+    // ZEVENT = série, pas rareté
+    const asSeries = SERIES_FROM_RARITY[g.key];
+    if (asSeries) {
+      if (!e.series.includes(asSeries)) e.series.push(asSeries);
+    } else if (!e.rarities.includes(g.key)) {
+      e.rarities.push(g.key);
+    }
+  }));
+  return [...map.values()].map(e => {
+    // Une carte qui n'est dans aucune liste de série (ex. anciens emojis "?")
+    // est classée en "Base"
+    if (e.series.length === 0) e.series.push("Base");
+    // Raretés affichées dans les lignes / popup (hors "Base") : pré-calculé
+    // une seule fois au lieu d'un .filter() à chaque rendu.
+    // AFFICHAGE DES RARETÉS DÉSACTIVÉ : tableau vide = plus de lignes de rareté
+    // sur les cartes ni de sections rareté dans la popup.
+    e.displayRarities = [];
+    // Séries affichées sur la carte (hors "Base" implicite) : pré-calculé.
+    e.displaySeries = e.series.filter(s => s !== "Base");
+    return e;
+  });
+})();
+// nom normalisé -> nom d'affichage exact (pour la migration des anciennes clés)
+const DISPLAY_BY_NORM = new Map(ALL_CARDS.map(c => [normKey(c.name), c.name]));
+const CARD_BY_NORM = new Map(ALL_CARDS.map(c => [normKey(c.name), c]));
+// Couleurs des tags de rareté
+const RARITY_COLORS = {
+  "Base": "bg-slate-700 text-slate-200",
+  "SR": "bg-blue-900/70 text-blue-300",
+  "SSR": "bg-purple-900/70 text-purple-300",
+  "UR": "bg-amber-900/70 text-amber-300",
+  "UR2": "bg-orange-900/70 text-orange-300",
+  "SEC": "bg-rose-900/70 text-rose-300",
+  "SEC2": "bg-pink-900/70 text-pink-300",
+  "ZEVENT": "bg-yellow-900/70 text-yellow-300"
+};
+// Bordures (hex) des sections de rareté dans la popup
+const RARITY_BORDER = {
+  "Base": "#64748b", "SR": "#3b82f6", "SSR": "#a855f7", "UR": "#f59e0b",
+  "UR2": "#fb923c", "SEC": "#f43f5e", "SEC2": "#ec4899",
+  "ZEVENT": "#eab308"
+};
+// Nombre de numéros possibles par rareté dans la popup (1 par défaut)
+const RARITY_COUNT = { "SR": 1, "SSR": 1, "UR": 1, "UR2": 1, "SEC": 1, "SEC2": 1, "ZEVENT": 1 };
+
+// ===== HELPERS PERF =====
+const EMPTY = {};
+const PAGE = 60; // nombre de cartes rendues à la fois (chargement progressif)
+const hasVariants = (cardState) => {
+  if (!cardState) return false;
+  for (const k in cardState) { const v = cardState[k]; if (Array.isArray(v) && v.length > 0) return true; }
+  return false;
+};
+// Sections applicables à une carte + total : calculé une seule fois par carte.
+const SECTIONS_CACHE = new Map();
+const sectionsInfo = (cardName) => {
+  let info = SECTIONS_CACHE.get(cardName);
+  if (!info) {
+    const sections = ALL_SECTIONS.filter(c =>
+      !(c === "Fullart" && !isFullartCard(cardName)) && sectionApplies(c, cardName));
+    info = { sections, total: sections.reduce((s, c) => s + sectionCount(c), 0) };
+    SECTIONS_CACHE.set(cardName, info);
+  }
+  return info;
+};
+const countOwned = (st, sections) => {
+  if (!st) return 0;
+  let n = 0;
+  for (const c of sections) if (st[c]) n += st[c].length;
+  return n;
+};
+
+// ===== CARTE (mémoïsée : ne se re-rend que si SES données changent) =====
+  // ===== CARTE =====
+  // Chaque carte affiche, pour chaque cadre, "Cadre X/Y" (obtenues / total),
+  // une mini barre de progression, les tags de numéros et un bouton +.
+  const Card = memo(function Card({ r, own, onAdd, onRemove, onOpen }) {
+    const { sections, total } = sectionsInfo(r.name);
+    const owned = countOwned(own, sections);
+    const pct = total > 0 ? Math.round(owned / total * 100) : 0;
+    const complete = owned === total && total > 0;
+    return (
+      <div key={r.name}
+        className={`rounded-xl border p-4 flex flex-col transition ${
+          complete
+            ? "border-emerald-500/60 bg-emerald-950/20"
+            : hasVariants(own)
+              ? "border-slate-700 bg-slate-900"
+              : "border-slate-800 bg-slate-900/60"
+        }`}>
+        {/* En-tête : pseudo cliquable + chips de série */}
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <button onClick={() => onOpen(r.name)}
+            className="font-bold text-indigo-300 hover:text-indigo-100 hover:underline cursor-pointer text-left">
+            {r.name}
+          </button>
+        </div>
+
+        {/* Chips des séries de la carte (pré-calculées dans displaySeries) */}
+        {r.displaySeries.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {r.displaySeries.map(s => (
+              <span key={s}
+                className="px-1.5 py-0.5 text-[10px] rounded-full bg-slate-800 text-slate-300 border border-slate-600">
+                {s}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Progression globale de la carte */}
+        <div className="mb-3">
+          <div className="flex justify-between text-xs mb-1">
+            <span className={complete ? "text-emerald-400 font-semibold" : "text-slate-400"}>
+              {owned}/{total} ({pct}%)
+            </span>
+            {complete && <span className="text-emerald-400 font-semibold">Complète !</span>}
+          </div>
+          <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
+            <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400 transition-all"
+              style={{ width: pct + "%" }}></div>
+          </div>
+        </div>
+
+        {/* Une ligne par section (cadres puis raretés) : "Basique 10/137" + barre + boutons.
+            Boucle unique : cadres et raretés partagent le même markup (perf + code réduit). */}
+        <div className="space-y-1.5">
+          {[
+            ...sections.map(c => ({ key: c, label: c, max: sectionCount(c), color: CADRE_BORDER[c] || "#6366f1" })),
+            ...r.displayRarities.map(rr => ({ key: "R:" + rr, label: rr, max: RARITY_COUNT[rr] || 1, color: RARITY_BORDER[rr] || "#6366f1" }))
+          ].map(({ key, label, max, color }) => {
+            const count = own[key] ? own[key].length : 0; // déjà trié à l'écriture : pas de slice().sort()
+            const done = count === max;
+            const pct = Math.round(count / max * 100);
+            return (
+              <div key={key} className="flex items-center gap-2">
+                {/* Pastille de la section */}
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }}></span>
+                {/* Nom + compteur obtenues/total */}
+                <span className="text-xs w-28 shrink-0 flex items-baseline gap-1">
+                  <span className="text-slate-300 font-medium">{label}</span>
+                  <span className={done ? "text-emerald-400 font-bold" : "text-slate-400"}>
+                    {count}/{max}
+                  </span>
+                </span>
+                {/* Mini barre de progression */}
+                <span className="h-1 rounded-full bg-slate-800 overflow-hidden grow" style={{ minWidth: 24 }}>
+                  <span className="block h-full rounded-full" style={{ width: pct + "%", background: color }}></span>
+                </span>
+                <span className="flex flex-wrap gap-1 justify-end">
+                  {count > 0 && (
+                    <button onClick={() => onRemove(r.name, key)}
+                      title="Retirer un numéro"
+                      className="px-1.5 py-0.5 text-[10px] bg-slate-700 hover:bg-red-700 rounded-full">&minus;</button>
+                  )}
+                  {count < max && (
+                    <button onClick={() => onAdd(r.name, key)}
+                      title="Ajouter un numéro"
+                      className="px-1.5 py-0.5 text-[10px] bg-slate-700 hover:bg-slate-600 rounded-full">+</button>
+                  )}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  });
+
+function Collection() {
+  const [rarityFilter, setRarityFilter] = useState(null); // rareté filtrée (null = toutes)
+  const [search, setSearch] = useState("");
+  const [serieFilter, setSerieFilter] = useState(null); // série filtrée (null = toutes)
+  const [showOnlyOwned, setShowOnlyOwned] = useState(false); // masquer les cartes vierges
+  const [state, setState] = useState(loadState);
+  const [vgachadexCard, setvgachadexCard] = useState(null);
+  const modalRef = useRef(null);
+
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  useEffect(() => {
+    const t = setTimeout(() => { saveState(state); writeLinked(state); }, 300);
+    return () => clearTimeout(t);
+  }, [state]);
+  useEffect(() => {
+    const flush = () => saveState(stateRef.current);
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, []);
+  const dSearch = useDeferredValue(search); // frappe fluide dans la recherche
+  const [limit, setLimit] = useState(PAGE);
+  // Le sentinel est passé à setState en ref : l'observer n'est créé qu'une
+  // seule fois par apparition du sentinel (et non à chaque page chargée).
+  const [sentinel, setSentinel] = useState(null);
+
+  useEffect(() => {
+    document.body.style.overflow = vgachadexCard ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [vgachadexCard]);
+
+  const closeModal = () => {
+    if (modalRef.current) {
+      document.body.removeChild(modalRef.current);
+      modalRef.current = null;
+    }
+  };
+
+  const toggleVariant = (card, cadre, number) => {
+    setState(prev => {
+      const cardData = prev[card] || {};
+      const currentNumbers = cardData[cadre] || [];
+      const nextNumbers = currentNumbers.includes(number)
+        ? currentNumbers.filter(n => n !== number)
+        : [...currentNumbers, number].sort((a, b) => a - b);
+      const newCardData = { ...cardData };
+      if (nextNumbers.length > 0) newCardData[cadre] = nextNumbers;
+      else delete newCardData[cadre];
+      return { ...prev, [card]: Object.keys(newCardData).length > 0 ? newCardData : undefined };
+    });
+  };
+
+
+  const addCustomVariant = (card, cadre) => {
+    closeModal();
+    const max = sectionCount(cadre);
+    const currentNumbers = [...(state[card]?.[cadre] || [])].sort((a, b) => a - b);
+    const availableNumbers = [];
+    for (let i = 1; i <= max; i++) {
+      if (!currentNumbers.includes(i)) availableNumbers.push(i);
+    }
+    if (availableNumbers.length === 0) {
+      alert(`Toutes les variantes (1-${max}) sont déjà cochées pour ${cadre}!`);
+      return;
+    }
+    const modal = document.createElement('div');
+    modal.className = "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50";
+    modal.innerHTML = `
+      <div class="bg-slate-800 rounded-lg p-4 w-64 relative">
+        <button class="absolute top-2 right-2 text-slate-400 hover:text-white text-xl">&times;</button>
+        <h3 class="text-white mb-2">Ajouter ${cadre.replace(/^R:/, "")}</h3>
+        <p class="text-xs text-slate-400 mb-2">Pour: ${card}</p>
+        <select id="variant-select" class="w-full bg-slate-700 rounded p-2 mb-3">
+          ${availableNumbers.map(num => `<option value="${num}">${num}</option>`).join('')}
+        </select>
+        <div class="flex gap-2">
+          <button id="variant-confirm" class="bg-indigo-600 text-white px-3 py-1 rounded">Ajouter</button>
+          <button id="variant-cancel" class="bg-slate-700 text-white px-3 py-1 rounded">Annuler</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    modalRef.current = modal;
+    const confirmBtn = modal.querySelector('#variant-confirm');
+    const cancelBtn = modal.querySelector('#variant-cancel');
+    const closeBtn = modal.querySelector('button');
+    confirmBtn.onclick = () => {
+      const num = parseInt(modal.querySelector('#variant-select').value);
+      if (!isNaN(num)) toggleVariant(card, cadre, num);
+      closeModal();
+    };
+    cancelBtn.onclick = closeModal;
+    closeBtn.onclick = closeModal;
+    modal.onclick = (e) => { if (e.target === modal) closeModal(); };
+  };
+
+  const removeCustomVariant = (card, cadre) => {
+    closeModal();
+    const currentNumbers = [...(state[card]?.[cadre] || [])].sort((a, b) => a - b);
+    if (currentNumbers.length === 0) return;
+    if (currentNumbers.length === 1) { toggleVariant(card, cadre, currentNumbers[0]); return; }
+    const modal = document.createElement('div');
+    modal.className = "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50";
+    modal.innerHTML = `
+      <div class="bg-slate-800 rounded-lg p-4 w-64 relative">
+        <button class="absolute top-2 right-2 text-slate-400 hover:text-white text-xl">&times;</button>
+        <h3 class="text-white mb-2">Retirer ${cadre.replace(/^R:/, "")}</h3>
+        <p class="text-xs text-slate-400 mb-2">Pour: ${card}</p>
+        <select id="variant-select" class="w-full bg-slate-700 rounded p-2 mb-3">
+          ${currentNumbers.map(num => `<option value="${num}">${num}</option>`).join('')}
+        </select>
+        <div class="flex gap-2">
+          <button id="variant-confirm" class="bg-red-600 text-white px-3 py-1 rounded">Retirer</button>
+          <button id="variant-cancel" class="bg-slate-700 text-white px-3 py-1 rounded">Annuler</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    modalRef.current = modal;
+    modal.querySelector('#variant-confirm').onclick = () => {
+      const num = parseInt(modal.querySelector('#variant-select').value);
+      if (!isNaN(num)) toggleVariant(card, cadre, num);
+      closeModal();
+    };
+    modal.querySelector('#variant-cancel').onclick = closeModal;
+    modal.querySelector('button').onclick = closeModal;
+    modal.onclick = (e) => { if (e.target === modal) closeModal(); };
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') { closeModal(); setvgachadexCard(null); }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Noms des cartes possédées (recalculé uniquement quand state change)
+  const ownedNames = useMemo(() => {
+    const s = new Set();
+    for (const k in state) if (hasVariants(state[k])) s.add(k);
+    return s;
+  }, [state]);
+
+  // Compteur global des numéros de cartes (toutes cartes, toutes sections)
+  // total = nombre de numéros possibles dans toute la collection
+  // owned = numéros effectivement cochés
+  const globalNumbers = useMemo(() => {
+    let total = 0, owned = 0;
+    ALL_CARDS.forEach(c => {
+      const info = sectionsInfo(c.name);
+      total += info.total;
+      const st = state[c.name];
+      if (st) for (const k in st) {
+        const v = st[k];
+        if (Array.isArray(v)) owned += v.length;
+      }
+    });
+    return { total, owned };
+  }, [state]);
+
+  // Liste filtrée : rareté + série + recherche + masquage des vierges
+  const ownedDep = showOnlyOwned ? ownedNames : null;
+  const cards = useMemo(() => {
+    const q = dSearch.trim().toLowerCase();
+    return ALL_CARDS.filter(r => {
+      if (q && !r.lower.includes(q)) return false;
+      if (rarityFilter && !r.rarities.includes(rarityFilter)) return false;
+      if (serieFilter && !r.series.includes(serieFilter)) return false;
+      if (showOnlyOwned && !ownedNames.has(r.name)) return false;
+      return true;
+    });
+  }, [dSearch, rarityFilter, serieFilter, showOnlyOwned, ownedDep]);
+
+  // Chargement progressif : on repart de la 1re page quand les filtres changent
+  useEffect(() => { setLimit(PAGE); }, [dSearch, rarityFilter, serieFilter, showOnlyOwned]);
+  useEffect(() => {
+    if (!sentinel) return;
+    const io = new IntersectionObserver(es => {
+      if (es[0].isIntersecting) setLimit(l => l + PAGE);
+    }, { rootMargin: "800px" });
+    io.observe(sentinel);
+    return () => io.disconnect();
+  }, [sentinel]);
+
+  // Stats des chips de rareté (en tenant compte du filtre série actif)
+  const rarityStats = useMemo(() => {
+    const counts = new Map(); // rareté -> { total, owned }
+    ALL_CARDS.forEach(c => {
+      if (serieFilter && !c.series.includes(serieFilter)) return;
+      const owned = ownedNames.has(c.name);
+      c.rarities.forEach(key => {
+        const item = counts.get(key) || { total: 0, owned: 0 };
+        item.total++;
+        if (owned) item.owned++;
+        counts.set(key, item);
+      });
+    });
+    const order = new Map(GROUPS.map((g, i) => [g.key, i]));
+    return [...counts.entries()]
+      .sort((a, b) => (order.get(a[0]) ?? Number.MAX_SAFE_INTEGER) - (order.get(b[0]) ?? Number.MAX_SAFE_INTEGER))
+      .map(([key, value]) => ({ key, total: value.total, owned: value.owned }));
+  }, [ownedNames, serieFilter]);
+
+  // Stats des chips de série (en tenant compte du filtre rareté actif)
+  const seriesStats = useMemo(() => {
+    const counts = new Map(); // série -> { total, owned }
+    ALL_CARDS.forEach(c => {
+      if (rarityFilter && !c.rarities.includes(rarityFilter)) return;
+      const owned = ownedNames.has(c.name);
+      c.series.forEach(label => {
+        const item = counts.get(label) || { total: 0, owned: 0 };
+        item.total++;
+        if (owned) item.owned++;
+        counts.set(label, item);
+      });
+    });
+    return [...counts.entries()]
+      // Masquer uniquement les boutons de ces séries, sans retirer leurs cartes ni leurs tags.
+      .filter(([label]) => !HIDDEN_SERIES_BUTTONS.has(label))
+      .sort((a, b) => (SERIES_ORDER_INDEX.get(a[0]) ?? SERIES_ORDER.length) - (SERIES_ORDER_INDEX.get(b[0]) ?? SERIES_ORDER.length))
+      .map(([label, value]) => ({ label, total: value.total, owned: value.owned }));
+  }, [ownedNames, rarityFilter]);
+
+  // Callbacks à identité stable (sinon React.memo ne servirait à rien)
+  // (onToggle retiré : Card ne l'utilisait pas, la popup appelle toggleVariant directement)
+  const addRef = useRef(); addRef.current = addCustomVariant;
+  const onAdd = useCallback((...a) => addRef.current(...a), []);
+  const removeRef = useRef(); removeRef.current = removeCustomVariant;
+  const onRemove = useCallback((...a) => removeRef.current(...a), []);
+  const onOpen = setvgachadexCard;
+
+  // ===== Fichier de progression : export / import / fichier lié =====
+  const importRef = useRef(null);
+  const [linked, setLinked] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const canLink = typeof window.showSaveFilePicker === "function";
+  const exportProgress = () => {
+    const blob = new Blob([toProgressFile(state)], { type: "text/javascript" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "vgacha-progression.js";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  const closeMenu = () => setMenuOpen(false);
+  const importProgress = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const imported = migrateState(parseProgress(await file.text()));
+      setState(prev => mergeStates(prev, imported)); // fusion : rien n'est écrasé
+    } catch (err) { alert("Fichier de progression invalide."); }
+  };
+  const linkFile = async () => {
+    try {
+      linkedHandle = await window.showSaveFilePicker({
+        suggestedName: "vgacha-progression.js",
+        types: [{ description: "Progression VGacha", accept: { "text/javascript": [".js"] } }]
+      });
+      setLinked(true);
+      writeLinked(stateRef.current);
+    } catch (err) {}
+  };
+
+  // Sections affichées pour une carte : cadres classiques + collections
+  // supplémentaires, en respectant les listes d'éligibilité (Fullart et
+  // SECTION_CARDS — comme Fullart, VTA25, Eikyuu Hours, GraVty, Signed Fullart)
+  const cadresForCard = (cardName) => sectionsInfo(cardName).sections;
+  const totalVariants = (cardName) => sectionsInfo(cardName).total;
+  const ownedVariants = (cardName) => countOwned(state[cardName], sectionsInfo(cardName).sections);
+
+  // ===== POPUP VgachaCARDEX =====
+  // Infos (tags de rareté + séries) d'une carte fusionnée
+  const cardInfo = (cardName) => CARD_BY_NORM.get(normKey(cardName)) || { rarities: [], displayRarities: [], series: [] };
+
+  const renderVgachacardex = (cardName) => {
+    if (!cardName) return null;
+    const cardState = state[cardName] || {};
+    const info = cardInfo(cardName);
+    const owned = ownedVariants(cardName);
+    const total = totalVariants(cardName);
+    const pct = total > 0 ? Math.round(owned / total * 100) : 0;
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-start justify-center z-50 overflow-y-auto p-4"
+           onClick={(e) => { if (e.target === e.currentTarget) setvgachadexCard(null); }}>
+        <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-3xl my-8 p-5 relative shadow-2xl">
+          <button onClick={() => setvgachadexCard(null)}
+            className="absolute top-3 right-3 text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
+          <h2 className="text-xl font-bold text-white mb-2 flex flex-wrap items-center gap-2">
+            Collection de <span className="text-indigo-400">{cardName}</span>
+            {/* Tags de rareté (SR, SSR, UR, ZEVENT…) — affichage désactivé */}
+            {false && info.rarities.map(rr => (
+              <span key={rr}
+                className={`px-2 py-0.5 text-[11px] font-semibold rounded-full border border-white/10 ${RARITY_COLORS[rr] || "bg-slate-700 text-slate-200"}`}>
+                {rr}
+              </span>
+            ))}
+          </h2>
+          {/* Série(s) de la carte */}
+          <div className="flex flex-wrap gap-1 mb-2">
+            {info.series.map(s => (
+              <span key={s} className="px-2 py-0.5 text-[11px] rounded-full bg-slate-800 text-slate-300 border border-slate-600">
+                {s}
+              </span>
+            ))}
+          </div>
+          <p className="text-sm text-slate-400 mb-2">
+            <span className="text-emerald-400 font-semibold">{owned}</span> / {total} cartes possédées ({pct}%)
+          </p>
+          <div className="h-2 rounded-full bg-slate-700 overflow-hidden mb-4">
+            <div className="h-full bg-gradient-to-r from-indigo-500 to-cyan-400" style={{ width: pct + "%" }}></div>
+          </div>
+          <p className="text-xs text-slate-500 mb-3">Clique sur une carte pour l'ajouter / la retirer de ta collection.</p>
+
+          {cadresForCard(cardName).map((cadre) => {
+            const max = sectionCount(cadre);
+            // Set : test d'appartenance en O(1) au lieu de includes() en O(n) par carte
+            const ownedSet = new Set(cardState[cadre] || []);
+            return (
+              <div key={cadre} className="mb-4">
+                <h3 className="text-sm font-semibold text-slate-300 mb-2">
+                  {cadre} <span className="text-xs text-slate-500">({ownedSet.size}/{max})</span>
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {Array.from({ length: max }, (_, i) => i + 1).map((num) => {
+                    const isOwned = ownedSet.has(num);
+                    return (
+                      <div key={num}
+                        onClick={() => toggleVariant(cardName, cadre, num)}
+                        title={`${cadre} #${num}${isOwned ? " — possédée (cliquer pour retirer)" : " — manquante (cliquer pour ajouter)"}`}
+                        className={`w-11 h-[4.2rem] rounded-lg cursor-pointer relative overflow-hidden select-none transition-transform hover:scale-105 ${
+                          isOwned ? "" : "opacity-60"
+                        }`}
+                        style={{
+                          border: "2px solid",
+                          borderColor: isOwned ? (CADRE_BORDER[cadre] || "#6366f1") : "#334155",
+                          background: isOwned
+                            ? "radial-gradient(circle at 50% 30%, rgba(99,102,241,0.35), rgba(15,23,42,0.9))"
+                            : "#1e293b",
+                          filter: isOwned ? "none" : "grayscale(1) brightness(0.6)"
+                        }}>
+                        <div className={`w-full h-full flex flex-col items-center justify-center gap-0.5 ${
+                          isOwned ? "text-white" : "text-slate-500"
+                        }`}>
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                            isOwned ? "bg-indigo-600 text-white" : "bg-slate-700 text-slate-400"
+                          }`}>{cardName[0].toUpperCase()}</div>
+                          <span className={`text-base font-extrabold leading-none ${isOwned ? "text-cyan-300" : ""}`}
+                            style={{ textShadow: "0 1px 3px rgba(0,0,0,0.8)" }}>#{num}</span>
+                        </div>
+                        {!isOwned && (
+                          <div className="absolute top-0 right-0.5 text-lg font-extrabold text-slate-300/70"
+                               style={{ textShadow: "0 1px 4px #000" }}>?</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* ===== SECTIONS RARETÉ (SR, SSR, UR, ZEVENT…) ===== */}
+          {/* Comme les sections de cadres : cartes cliquables. Stockées sous la
+              clé "R:<rareté>" pour ne pas entrer en conflit avec les cadres
+              (ex. "Fullart"). */}
+          {info.displayRarities.map((rr) => {
+            const rKey = "R:" + rr;
+            const max = RARITY_COUNT[rr] || 1;
+            const ownedSet = new Set(cardState[rKey] || []);
+            return (
+              <div key={rKey} className="mb-4">
+                <h3 className="text-sm font-semibold text-slate-300 mb-2">
+                  <span className={`px-1.5 py-0.5 mr-1 text-[10px] font-semibold rounded-full border border-white/10 ${RARITY_COLORS[rr] || "bg-slate-700 text-slate-200"}`}>{rr}</span>
+                  Rareté <span className="text-xs text-slate-500">({ownedSet.size}/{max})</span>
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {Array.from({ length: max }, (_, i) => i + 1).map((num) => {
+                    const isOwned = ownedSet.has(num);
+                    return (
+                      <div key={num}
+                        onClick={() => toggleVariant(cardName, rKey, num)}
+                        title={`${rr} #${num}${isOwned ? " — possédée (cliquer pour retirer)" : " — manquante (cliquer pour ajouter)"}`}
+                        className={`w-11 h-[4.2rem] rounded-lg cursor-pointer relative overflow-hidden select-none transition-transform hover:scale-105 ${
+                          isOwned ? "" : "opacity-60"
+                        }`}
+                        style={{
+                          border: "2px solid",
+                          borderColor: isOwned ? (RARITY_BORDER[rr] || "#6366f1") : "#334155",
+                          background: isOwned
+                            ? "radial-gradient(circle at 50% 30%, rgba(99,102,241,0.35), rgba(15,23,42,0.9))"
+                            : "#1e293b",
+                          filter: isOwned ? "none" : "grayscale(1) brightness(0.6)"
+                        }}>
+                        <div className={`w-full h-full flex flex-col items-center justify-center gap-0.5 ${
+                          isOwned ? "text-white" : "text-slate-500"
+                        }`}>
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                            isOwned ? "bg-indigo-600 text-white" : "bg-slate-700 text-slate-400"
+                          }`}>{cardName[0].toUpperCase()}</div>
+                          <span className={`text-base font-extrabold leading-none ${isOwned ? "text-cyan-300" : ""}`}
+                            style={{ textShadow: "0 1px 3px rgba(0,0,0,0.8)" }}>#{num}</span>
+                        </div>
+                        {!isOwned && (
+                          <div className="absolute top-0 right-0.5 text-lg font-extrabold text-slate-300/70"
+                               style={{ textShadow: "0 1px 4px #000" }}>?</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-white">VGacha — Collection Complète (Vue Cartes)</h1>
+            <p className="text-sm text-slate-400">Clique sur un pseudo pour ouvrir sa collection en cartes, un tag pour le supprimer, ou "+" pour ajouter un numéro</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher une carte…" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm w-56"/>
+            <button onClick={() => { setSearch(""); setRarityFilter(null); setSerieFilter(null); setShowOnlyOwned(false); setLimit(PAGE); }}
+              className="text-xs px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700">Reset</button>
+            <div className="relative">
+              <button onClick={() => setMenuOpen(o => !o)} title="Menu progression"
+                className="text-base leading-none px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700">&#9776;</button>
+              {menuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={closeMenu}></div>
+                  <div className="absolute right-0 mt-1 w-56 z-50 rounded-lg border border-slate-700 bg-slate-800 shadow-xl p-1 text-sm">
+                    <button onClick={() => { exportProgress(); closeMenu(); }}
+                      className="w-full text-left px-3 py-2 rounded hover:bg-slate-700">Exporter la progression</button>
+                    <button onClick={() => { importRef.current && importRef.current.click(); closeMenu(); }}
+                      className="w-full text-left px-3 py-2 rounded hover:bg-slate-700">Importer (fusion)</button>
+                    {canLink && (
+                      <button onClick={() => { linkFile(); closeMenu(); }}
+                        className="w-full text-left px-3 py-2 rounded hover:bg-slate-700">
+                        {linked ? "Fichier lié ✓ (changer)" : "Lier un fichier (auto-save)"}
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+              <input ref={importRef} type="file" accept=".js,.json,application/json,text/javascript" onChange={importProgress} className="hidden"/>
+            </div>
+          </div>
+        </div>
+        {/* BARRE DE FILTRES : raretés (tags) + séries */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 mb-4 space-y-2">
+          {/* Rangée 1 : raretés (SR, SSR, UR, ZEVENT… = tags des cartes) */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wide text-slate-500 w-14">Rareté</span>
+            <button onClick={() => setRarityFilter(null)}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium border transition ${
+                rarityFilter === null
+                  ? "bg-slate-100 border-slate-100 text-slate-900"
+                  : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
+              }`}>Toutes</button>
+            {rarityStats.map(({ key, owned, total }) => {
+              const active = rarityFilter === key;
+              return (
+                <button key={key} onClick={() => setRarityFilter(active ? null : key)}
+                  title={`Afficher uniquement les cartes avec le tag ${key}`}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition ${
+                    active
+                      ? "bg-indigo-600 border-indigo-500 text-white"
+                      : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
+                  }`}>
+                  {key}
+                  <span className={`ml-1 text-[10px] font-bold ${active ? "text-white/80" : "text-slate-500"}`}>
+                    {owned}/{total}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {/* Rangée 2 : séries (VTA 2025, Eikyuu Hours…) */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wide text-slate-500 w-14">Série</span>
+            <button onClick={() => setSerieFilter(null)}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium border transition ${
+                serieFilter === null
+                  ? "bg-slate-100 border-slate-100 text-slate-900"
+                  : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
+              }`}>Toutes</button>
+            {seriesStats.map(({ label, owned, total }) => {
+              const active = serieFilter === label;
+              return (
+                <button key={label} onClick={() => setSerieFilter(active ? null : label)}
+                  title={`Afficher uniquement les cartes de la série ${label}`}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition ${
+                    active
+                      ? "bg-indigo-600 border-indigo-500 text-white"
+                      : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
+                  }`}>
+                  {label}
+                  <span className={`ml-1 text-[10px] font-bold ${active ? "text-white/80" : "text-slate-500"}`}>
+                    {owned}/{total}
+                  </span>
+                </button>
+              );
+            })}
+            {/* Toggle : masquer les cartes sans aucune obtention */}
+            <label className="ml-auto flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none">
+              <input type="checkbox" checked={showOnlyOwned}
+                onChange={(e) => setShowOnlyOwned(e.target.checked)}
+                className="accent-indigo-500 cursor-pointer"/>
+              Masquer les cartes vierges
+            </label>
+          </div>
+          {(rarityFilter || serieFilter) && (
+            <p className="text-xs text-slate-400">
+              Filtres actifs :{" "}
+              {rarityFilter && <span className="text-indigo-300 font-semibold">{rarityFilter}</span>}
+              {rarityFilter && serieFilter && " + "}
+              {serieFilter && <span className="text-indigo-300 font-semibold">{serieFilter}</span>}
+              {" "}(clique à nouveau sur un chip pour le retirer)
+            </p>
+          )}
+        </div>
+
+        <div className="mb-4 text-sm text-slate-400">
+          <span className="text-emerald-400 font-semibold">{cards.reduce((count, card) => count + (ownedNames.has(card.name) ? 1 : 0), 0)}</span>
+          {" "}/ {cards.length} cartes affichées avec variantes
+          {" "}<span className="text-slate-500">— <span className="text-cyan-300 font-semibold">{globalNumbers.owned}</span> / {globalNumbers.total} numéros de cartes au total</span>
+        </div>
+
+        {/* GRILLE DE CARTES */}
+        {cards.length === 0 ? (
+          <p className="text-slate-500 text-sm">Aucune carte trouvée pour « {search} ».</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {cards.slice(0, limit).map(c => (
+              <Card key={c.name} r={c} own={state[c.name] || EMPTY}
+                onAdd={onAdd} onRemove={onRemove} onOpen={onOpen} />
+            ))}
+            {cards.length > limit && (
+              <div ref={setSentinel} className="col-span-full py-4 text-center text-xs text-slate-500">Chargement…</div>
+            )}
+          </div>
+        )}
+
+        <p className="text-xs text-slate-500 mt-4">
+          <strong>Instructions:</strong><br/>
+          - Clique sur un pseudo pour ouvrir sa vue Vgachacardex (possédées en couleur, manquantes en grisé)<br/>
+          - Sur chaque carte : "Basique 10/137" = numéros obtenus / total possibles pour ce cadre<br/>
+          - Clique sur un tag pour le supprimer, sur + pour ajouter un numéro<br/>
+          - Ta progression est sauvegardée automatiquement (même clé que l'ancienne version : tes données sont conservées)
+        </p>
+      </div>
+
+      {renderVgachacardex(vgachadexCard)}
+    </div>
+  );
+}
+
+// ===== PANEL ADMIN (ex vgacha-admin.html), isolé dans sa propre portée =====
+const AdminPanel = (() => {
+const { useState, useMemo, useEffect, useRef } = React;
+
+const PREFIX = { Base: "", SR: "SR-", SSR: "SSR-", UR: "UR-", UR2: "UR2-", SEC: "SEC-", SEC2: "SEC2-", ZEVENT: "ZEVENT-" };
+const RO = GROUPS.map(g => g.key);
+const strip = n => n.replace(/^(SSR|SR|UR2|UR|SEC2|SEC|ZEVENT|SPOOKY)-/i, "").trim();
+const nk = n => strip(n).toLowerCase().replace(/_/g, " ");
+const uid = () => Math.random().toString(36).slice(2, 10);
+const DK = "vgacha-admin-draft";
+const uniq = a => [...new Set(a)];
+
+// Règles : quelle section s'affiche sur la carte selon les séries et raretés cochées
+const has = (arr, ...v) => v.some(x => arr.includes(x));
+const RULES = {
+  "VTA25": (s) => has(s, "VTA 2025"),
+  "Zevent": (s, r) => has(s, "Zevent") || has(r, "ZEVENT"),
+  "Fluff Event 2026": (s) => has(s, "Fluff Event 2026"),
+  "Spooky": (s) => has(s, "Spooky"),
+  "Signed Fullart": (s, r) => has(s, "Signed Fullart") && has(r, "SSR"),
+  "GraVty": (s, r) => has(s, "GraVty") && has(r, "UR"),
+  "Signed GraVty": (s, r) => has(s, "Signed GraVty") && has(r, "SEC"),
+  "Eikyuu Hours": (s, r) => has(s, "Eikyuu Hours") && has(r, "UR"),
+  "Eikyuu Hours Signed": (s, r) => has(s, "Eikyuu Hours Signed") && has(r, "SEC"),
+  "Blue & Gold": (s, r) => has(s, "Blue & Gold") && has(r, "UR"),
+  "Signed Blue & Gold": (s, r) => has(s, "Signed Blue & Gold") && has(r, "SEC"),
+  "Maid": (s, r) => has(s, "Maid") && has(r, "UR", "UR2"),
+  "Signed Maid": (s, r) => has(s, "Signed Maid") && has(r, "SEC", "SEC2"),
+  "Vecordia": (s, r) => has(s, "Vecordia") && has(r, "UR"),
+  "Signed Vecordia": (s, r) => has(s, "Signed Vecordia") && has(r, "SEC"),
+};
+
+// Construit le modèle éditable depuis vgacha-db.js
+function build() {
+  const map = new Map();
+  const get = n => {
+    const k = nk(n);
+    let p = map.get(k);
+    if (!p) { p = { id: uid(), name: strip(n), series: [], rarities: [], sections: [] }; map.set(k, p); }
+    return p;
+  };
+  GROUPS.forEach(g => g.cards.forEach(n => { const p = get(n); if (!p.rarities.includes(g.key)) p.rarities.push(g.key); }));
+  Object.entries(FILTRES).forEach(([s, l]) => l.forEach(n => { const p = get(n); if (!p.series.includes(s)) p.series.push(s); }));
+  const secs = typeof SECTIONS_DB !== "undefined" ? SECTIONS_DB : {};
+  Object.entries(secs).forEach(([s, l]) => l.forEach(n => { const p = get(n); if (!p.sections.includes(s)) p.sections.push(s); }));
+  return { people: [...map.values()], series: Object.keys(FILTRES), counts: { ...VARIANTES_COUNT }, sections: Object.keys(secs) };
+}
+
+// Génère le contenu du nouveau vgacha-db.js
+function generate(d) {
+  const q = JSON.stringify;
+  const rows = a => { const o = []; for (let i = 0; i < a.length; i += 4) o.push("    " + a.slice(i, i + 4).map(q).join(",    ") + ","); return o.join("\n"); };
+  let out = "";
+  out += "const CADRES = " + q(CADRES) + ";\n";
+  out += "const CADRE_COLORS = " + JSON.stringify(CADRE_COLORS, null, 2) + ";\n";
+  out += "const VARIANTES_COUNT = " + JSON.stringify(d.counts, null, 2) + ";\n\n";
+  out += "const FILTRES = {\n" + d.series.map(s =>
+    "  " + q(s) + ": [\n" + rows(d.people.filter(p => p.series.includes(s)).map(p => p.name)) + "\n  ],").join("\n") + "\n};\n\n";
+  RO.forEach(k => {
+    out += "const " + k.toUpperCase() + " = [\n" + rows(d.people.filter(p => p.rarities.includes(k)).map(p => PREFIX[k] + p.name)) + "\n];\n\n";
+  });
+  out += "const SECTIONS_DB = {\n" + (d.sections || []).map(s =>
+    "  " + q(s) + ": [\n" + rows(d.people.filter(p => (p.sections || []).includes(s)).map(p => p.name)) + "\n  ],").join("\n") + "\n};\n\n";
+  out += "const GROUPS = [\n" + RO.map(k => "  { key: " + q(k) + ", cards: " + k.toUpperCase() + " }").join(",\n") + "\n];\n";
+  return out;
+}
+
+const Chip = ({ on, onClick, children, tone = "indigo" }) => (
+  <button type="button" onClick={onClick}
+    className={`px-2.5 py-1 rounded-full text-xs border transition ${on
+      ? "bg-indigo-600 border-indigo-500 text-white"
+      : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"}`}>{children}</button>
+);
+
+function PersonForm({ person, series, sections, onSave, onClose }) {
+  const [text, setText] = useState(person ? person.name : "");
+  const [ss, setSs] = useState(person ? person.series : []);
+  const [rs, setRs] = useState(person ? person.rarities : ["Base"]);
+  const [sc, setSc] = useState(person ? person.sections || [] : []);
+  // Cocher/décocher une série ou une rareté met à jour automatiquement les sections de la carte
+  const sync = (ns, nr) => setSc(prev => {
+    let out = prev;
+    for (const [sec, f] of Object.entries(RULES)) {
+      const was = f(ss, rs), now = f(ns, nr);
+      if (was !== now) out = now ? uniq([...out, sec]) : out.filter(x => x !== sec);
+    }
+    return out;
+  });
+  const togS = v => { const n = ss.includes(v) ? ss.filter(x => x !== v) : [...ss, v]; setSs(n); sync(n, rs); };
+  const togR = v => { const n = rs.includes(v) ? rs.filter(x => x !== v) : [...rs, v]; setRs(n); sync(ss, n); };
+  const names = text.split("\n").map(s => s.trim()).filter(Boolean);
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-start justify-center overflow-y-auto p-4"
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-2xl my-8 p-5">
+        <h2 className="text-lg font-bold mb-4">{person ? "Modifier " + person.name : "Ajouter des personnes"}</h2>
+
+        <label className="block text-sm text-slate-300 mb-1">{person ? "Pseudo" : "Pseudos (un par ligne)"}</label>
+        {person
+          ? <input autoFocus value={text} onChange={e => setText(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 mb-1"/>
+          : <textarea autoFocus rows={4} value={text} onChange={e => setText(e.target.value)} placeholder={"Pseudo1\nPseudo2"} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 mb-1"/>}
+        <p className="text-xs text-slate-500 mb-4">
+          {person ? "Si le nouveau pseudo existe déjà, les deux fiches sont fusionnées."
+                  : "Un pseudo déjà présent n'est pas dupliqué : les séries et raretés cochées lui sont ajoutées."}
+        </p>
+
+        <p className="text-sm text-slate-300 mb-1">Raretés <span className="text-slate-500">(« Base » = la carte existe, sans préfixe)</span></p>
+        <div className="flex flex-wrap gap-2 mb-4">
+          {RO.map(r => <Chip key={r} on={rs.includes(r)} onClick={() => togR(r)}>{r}</Chip>)}
+        </div>
+
+        <p className="text-sm text-slate-300 mb-1">Séries</p>
+        <div className="flex flex-wrap gap-2 mb-5">
+          {series.map(s => <Chip key={s} on={ss.includes(s)} onClick={() => togS(s)}>{s}</Chip>)}
+        </div>
+
+        {sections.length > 0 && <>
+          <p className="text-sm text-slate-300 mb-1">Sections affichées sur la carte <span className="text-slate-500">(cochées automatiquement selon la série et la rareté, tu peux les modifier)</span></p>
+          <div className="flex flex-wrap gap-2 mb-5">
+            {sections.map(s => <Chip key={s} on={sc.includes(s)} onClick={() => setSc(sc.includes(s) ? sc.filter(x => x !== s) : [...sc, s])}>{s}</Chip>)}
+          </div>
+        </>}
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm">Annuler</button>
+          <button disabled={!names.length} onClick={() => onSave(person && person.id, names, ss, rs, sc)}
+            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-sm font-semibold">
+            {person ? "Enregistrer" : `Ajouter ${names.length || ""}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminPanel() {
+  const [data, setData] = useState(() => {
+    try {
+      const d = JSON.parse(localStorage.getItem(DK));
+      if (d && d.people) {
+        if (!d.sections) { const b = build(); d.sections = b.sections; const m = new Map(b.people.map(p => [nk(p.name), p])); d.people.forEach(p => { const o = m.get(nk(p.name)); p.sections = o ? o.sections : []; }); }
+        // Migration Halloween : l'ancienne section devient "Spooky"
+        if (d.sections.includes("Halloween") && !d.sections.includes("Spooky")) {
+          d.sections = d.sections.flatMap(s => s === "Halloween" ? ["Spooky", "Halloween"] : [s]);
+          d.people.forEach(p => { p.sections = (p.sections || []).map(s => s === "Halloween" ? "Spooky" : s); });
+        }
+        d.series = d.series.filter(s => s !== "Halloween");
+        d.sections = d.sections.filter(s => s !== "Halloween");
+        d.people.forEach(p => { p.sections = (p.sections || []).filter(s => s !== "Halloween"); });
+        // MIGRATION SÉRIES : réaligne les séries de chaque carte sur FILTRES
+        // (vgacha-db.js). Corrige les anciens brouillons (ex. GraVty à 60
+        // cartes -> 4 cartes, le reste repart dans "Base").
+        const bSync = build();
+        const mSync = new Map(bSync.people.map(p => [nk(p.name), p]));
+        d.people.forEach(p => {
+          const o = mSync.get(nk(p.name));
+          if (o) p.series = o.series.slice();
+          else if (!p.series.length) p.series = ["Base"];
+        });
+        d.series = bSync.series.slice();
+        return d;
+      }
+    } catch (e) {}
+    return build();
+  });
+  const [dirty, setDirty] = useState(() => !!localStorage.getItem(DK));
+  const [tab, setTab] = useState("people");
+  const [q, setQ] = useState("");
+  const [fs, setFs] = useState("");   // filtre série ("" = toutes, "__none" = sans rareté)
+  const [fr, setFr] = useState("");   // filtre rareté
+  const [limit, setLimit] = useState(100);
+  const [form, setForm] = useState(null); // null | "new" | person
+  const [msg, setMsg] = useState("");
+  const [newSerie, setNewSerie] = useState("");
+
+  useEffect(() => { try { localStorage.setItem(DK, JSON.stringify(data)); } catch (e) {} }, [data]);
+  useEffect(() => {
+    const h = e => { if (dirty) { e.preventDefault(); e.returnValue = ""; } };
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [dirty]);
+  useEffect(() => setLimit(100), [q, fs, fr]);
+  const flash = t => { setMsg(t); setTimeout(() => setMsg(""), 3500); };
+  const upd = f => { setData(d => f(structuredClone(d))); setDirty(true); };
+
+  const list = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    return data.people
+      .filter(p => (!s || p.name.toLowerCase().includes(s))
+        && (!fs || (fs === "__none" ? p.rarities.length === 0 : p.series.includes(fs)))
+        && (!fr || p.rarities.includes(fr)))
+      .sort((a, b) => a.name.localeCompare(b.name, "fr", { sensitivity: "base" }));
+  }, [data, q, fs, fr]);
+  const orphans = data.people.filter(p => p.rarities.length === 0).length;
+
+  const savePerson = (id, names, series, rarities, secs = []) => {
+    const rs = rarities.slice().sort((a, b) => RO.indexOf(a) - RO.indexOf(b));
+    upd(d => {
+      if (id) {
+        const p = d.people.find(x => x.id === id);
+        p.name = strip(names[0]); p.series = series; p.rarities = rs; p.sections = secs;
+        const dup = d.people.find(x => x.id !== id && nk(x.name) === nk(p.name));
+        if (dup) {
+          p.series = uniq([...p.series, ...dup.series]);
+          p.sections = uniq([...p.sections, ...(dup.sections || [])]);
+          p.rarities = uniq([...p.rarities, ...dup.rarities]).sort((a, b) => RO.indexOf(a) - RO.indexOf(b));
+          d.people = d.people.filter(x => x !== dup);
+        }
+      } else {
+        names.forEach(n => {
+          n = strip(n);
+          let p = d.people.find(x => nk(x.name) === nk(n));
+          if (!p) { p = { id: uid(), name: n, series: [], rarities: [], sections: [] }; d.people.push(p); }
+          p.series = uniq([...p.series, ...series]);
+          p.sections = uniq([...(p.sections || []), ...secs]);
+          p.rarities = uniq([...p.rarities, ...rs]).sort((a, b) => RO.indexOf(a) - RO.indexOf(b));
+        });
+      }
+      return d;
+    });
+    setForm(null);
+    flash(id ? "Fiche enregistrée." : `${names.length} personne(s) ajoutée(s) ou mise(s) à jour.`);
+  };
+  const del = p => { if (confirm(`Supprimer « ${p.name} » de la base ?`)) { upd(d => (d.people = d.people.filter(x => x.id !== p.id), d)); flash("Personne supprimée."); } };
+
+  const renameSerie = s => {
+    const n = (prompt("Nouveau nom de la série :", s) || "").trim();
+    if (!n || n === s) return;
+    if (data.series.includes(n)) return alert("Cette série existe déjà.");
+    upd(d => { d.series = d.series.map(x => x === s ? n : x); d.people.forEach(p => p.series = p.series.map(x => x === s ? n : x)); return d; });
+  };
+  const delSerie = s => {
+    if (!confirm(`Supprimer la série « ${s} » ? Les personnes restent dans la base.`)) return;
+    upd(d => { d.series = d.series.filter(x => x !== s); d.people.forEach(p => p.series = p.series.filter(x => x !== s)); return d; });
+  };
+  const moveSerie = (i, dir) => upd(d => { const j = i + dir; if (j >= 0 && j < d.series.length) [d.series[i], d.series[j]] = [d.series[j], d.series[i]]; return d; });
+  const addSerie = () => {
+    const n = newSerie.trim();
+    if (!n) return;
+    if (data.series.includes(n)) return alert("Cette série existe déjà.");
+    upd(d => (d.series.push(n), d)); setNewSerie("");
+  };
+
+  const out = useMemo(() => tab === "export" ? generate(data) : "", [data, tab]);
+  const download = () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([out], { type: "text/javascript" }));
+    a.download = "vgacha-db.js"; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000); setDirty(false);
+  };
+  const saveDirect = async () => {
+    try {
+      const h = await window.showSaveFilePicker({ suggestedName: "vgacha-db.js", types: [{ description: "JavaScript", accept: { "text/javascript": [".js"] } }] });
+      const w = await h.createWritable(); await w.write(out); await w.close();
+      setDirty(false); flash("vgacha-db.js enregistré.");
+    } catch (e) {}
+  };
+  const reset = () => {
+    if (!confirm("Abandonner toutes les modifications et recharger depuis vgacha-db.js ?")) return;
+    localStorage.removeItem(DK); setData(build()); setDirty(false);
+  };
+
+  const inp = "bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm";
+  const tabs = [["people", "Personnes"], ["series", "Séries et cadres"], ["export", "Exporter"]];
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-6">
+      <div className="max-w-5xl mx-auto">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <h1 className="text-2xl font-bold">VGacha — Admin</h1>
+            <p className="text-sm text-slate-400">{data.people.length} personnes · {data.series.length} séries</p>
+          </div>
+          {dirty && <button onClick={() => setTab("export")} className="text-xs px-3 py-1.5 rounded-lg bg-amber-900/60 border border-amber-700 text-amber-200">Modifications non exportées</button>}
+        </div>
+
+        <div className="flex gap-1 mb-4 border-b border-slate-800">
+          {tabs.map(([k, l]) => (
+            <button key={k} onClick={() => setTab(k)}
+              className={`px-4 py-2 text-sm -mb-px border-b-2 ${tab === k ? "border-indigo-500 text-white" : "border-transparent text-slate-400 hover:text-slate-200"}`}>{l}</button>
+          ))}
+        </div>
+
+        {msg && <div className="mb-3 text-sm rounded-lg bg-emerald-900/40 border border-emerald-700 text-emerald-200 px-3 py-2">{msg}</div>}
+
+        {tab === "people" && (
+          <>
+            <div className="flex flex-wrap gap-2 mb-3">
+              <input value={q} onChange={e => setQ(e.target.value)} placeholder="Rechercher un pseudo…" className={inp + " w-56"}/>
+              <select value={fs} onChange={e => setFs(e.target.value)} className={inp}>
+                <option value="">Toutes les séries</option>
+                {data.series.map(s => <option key={s}>{s}</option>)}
+                {orphans > 0 && <option value="__none">Sans rareté ({orphans})</option>}
+              </select>
+              <select value={fr} onChange={e => setFr(e.target.value)} className={inp}>
+                <option value="">Toutes les raretés</option>
+                {RO.map(r => <option key={r}>{r}</option>)}
+              </select>
+              <button onClick={() => setForm("new")} className="ml-auto px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold">Ajouter des personnes</button>
+            </div>
+            {orphans > 0 && <p className="text-xs text-amber-300 mb-3">{orphans} personne(s) figurent dans une série mais n'ont aucune rareté : elles n'apparaissent pas sur le site tant qu'on ne leur en donne pas une (en général « Base »).</p>}
+            <p className="text-xs text-slate-500 mb-2">{list.length} résultat(s)</p>
+            <div className="rounded-xl border border-slate-800 divide-y divide-slate-800">
+              {list.slice(0, limit).map(p => (
+                <div key={p.id} className="flex flex-wrap items-center gap-2 px-3 py-2 hover:bg-slate-900">
+                  <span className="font-semibold text-indigo-300 w-48 truncate" title={p.name}>{p.name}</span>
+                  <span className="flex flex-wrap gap-1 grow">
+                    {p.rarities.map(r => <span key={r} className="px-1.5 py-0.5 text-[10px] rounded-full bg-amber-900/50 text-amber-200">{r}</span>)}
+                    {p.series.filter(s => s !== "Base").map(s => <span key={s} className="px-1.5 py-0.5 text-[10px] rounded-full bg-slate-800 border border-slate-600 text-slate-300">{s}</span>)}
+                    {(p.sections || []).map(s => <span key={"sec" + s} className="px-1.5 py-0.5 text-[10px] rounded-full bg-teal-900/50 text-teal-200">{s}</span>)}
+                  </span>
+                  <button onClick={() => setForm(p)} className="text-xs px-2.5 py-1 rounded bg-slate-700 hover:bg-slate-600">Modifier</button>
+                  <button onClick={() => del(p)} className="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-red-700">Supprimer</button>
+                </div>
+              ))}
+              {list.length === 0 && <p className="p-4 text-sm text-slate-500">Aucun résultat. Ajoute cette personne avec le bouton ci-dessus.</p>}
+            </div>
+            {list.length > limit && <button onClick={() => setLimit(l => l + 200)} className="mt-3 text-sm px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700">Afficher plus ({list.length - limit} restants)</button>}
+          </>
+        )}
+
+        {tab === "series" && (
+          <div className="grid md:grid-cols-2 gap-6">
+            <div>
+              <h2 className="font-semibold mb-2">Séries</h2>
+              <p className="text-xs text-slate-500 mb-3">L'ordre ici est l'ordre des boutons sur le site.</p>
+              <div className="rounded-xl border border-slate-800 divide-y divide-slate-800 mb-3">
+                {data.series.map((s, i) => (
+                  <div key={s} className="flex items-center gap-1 px-3 py-2 text-sm">
+                    <span className="grow truncate">{s} <span className="text-slate-500 text-xs">({data.people.filter(p => p.series.includes(s)).length})</span></span>
+                    <button onClick={() => moveSerie(i, -1)} title="Monter" className="px-2 rounded bg-slate-800 hover:bg-slate-700">↑</button>
+                    <button onClick={() => moveSerie(i, 1)} title="Descendre" className="px-2 rounded bg-slate-800 hover:bg-slate-700">↓</button>
+                    <button onClick={() => renameSerie(s)} className="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600">Renommer</button>
+                    <button onClick={() => delSerie(s)} className="text-xs px-2 py-1 rounded bg-slate-800 hover:bg-red-700">Supprimer</button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input value={newSerie} onChange={e => setNewSerie(e.target.value)} onKeyDown={e => e.key === "Enter" && addSerie()} placeholder="Nouvelle série" className={inp + " grow"}/>
+                <button onClick={addSerie} className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold">Créer</button>
+              </div>
+            </div>
+            <div>
+              <h2 className="font-semibold mb-2">Nombre de numéros par cadre</h2>
+              <p className="text-xs text-slate-500 mb-3">Correspond à VARIANTES_COUNT.</p>
+              <div className="space-y-2">
+                {Object.keys(data.counts).map(c => (
+                  <label key={c} className="flex items-center justify-between gap-3 text-sm">
+                    {c}
+                    <input type="number" min="1" value={data.counts[c]}
+                      onChange={e => upd(d => (d.counts[c] = Math.max(1, parseInt(e.target.value) || 1), d))} className={inp + " w-24"}/>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab === "export" && (
+          <div className="max-w-xl">
+            <p className="text-sm text-slate-300 mb-4">Génère un nouveau <code className="text-indigo-300">vgacha-db.js</code> à remplacer dans le dossier du site. Ta progression de collection n'est pas touchée.</p>
+            <div className="flex flex-wrap gap-2 mb-4">
+              <button onClick={download} className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold">Télécharger vgacha-db.js</button>
+              {typeof window.showSaveFilePicker === "function" &&
+                <button onClick={saveDirect} className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm">Enregistrer dans le fichier (Chrome/Edge)</button>}
+              <button onClick={() => navigator.clipboard.writeText(out).then(() => flash("Contenu copié."))} className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm">Copier le contenu</button>
+            </div>
+            <p className="text-xs text-slate-500 mb-6">Les modifications sont gardées en brouillon dans ce navigateur jusqu'à l'export.</p>
+            <button onClick={reset} className="text-sm px-4 py-2 rounded-lg bg-slate-800 hover:bg-red-800 border border-slate-700">Abandonner les modifications</button>
+          </div>
+        )}
+      </div>
+      {form && <PersonForm key={form.id || "new"} person={form === "new" ? null : form} series={data.series} sections={data.sections || []} onSave={savePerson} onClose={() => setForm(null)} />}
+    </div>
+  );
+}
+
+
+return AdminPanel;
+})();
+
+// ===== NAVIGATION : Collection <-> Admin =====
+// Les deux vues restent montées (masquées en CSS) : filtres, saisies et sauvegarde en cours ne sont pas perdus.
+function Root() {
+  const [view, setView] = useState(location.hash === "#admin" ? "admin" : "collection");
+  const go = (v) => {
+    setView(v);
+    history.replaceState(null, "", v === "admin" ? "#admin" : location.pathname + location.search);
+    window.scrollTo(0, 0);
+  };
+  const tabs = [["collection", "Collection"], ["admin", "Admin"]];
+  return (
+    <>
+      <nav className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur border-b border-slate-800">
+        <div className="max-w-7xl mx-auto flex items-center gap-1 px-4">
+          <span className="font-bold text-white mr-4">VGacha</span>
+          {tabs.map(([k, l]) => (
+            <button key={k} onClick={() => go(k)}
+              className={`px-4 py-3 text-sm border-b-2 -mb-px transition ${view === k
+                ? "border-indigo-500 text-white"
+                : "border-transparent text-slate-400 hover:text-slate-200"}`}>{l}</button>
+          ))}
+        </div>
+      </nav>
+      <div style={{ display: view === "collection" ? "block" : "none" }}><Collection /></div>
+      <div style={{ display: view === "admin" ? "block" : "none" }}><AdminPanel /></div>
+    </>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<Root />);
+  </script>
+</body>
+</html>
