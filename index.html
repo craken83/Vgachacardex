@@ -333,7 +333,9 @@ const ALL_CARDS = (() => {
     // Séries affichées sur la carte (hors "Base" implicite) : pré-calculé.
     e.displaySeries = e.series.filter(s => s !== "Base");
     return e;
-  });
+  })
+  // Affichage des cartes en ordre alphabétique (insensible à la casse / accents)
+  .sort((a, b) => a.name.localeCompare(b.name, "fr", { sensitivity: "base" }));
 })();
 // nom normalisé -> nom d'affichage exact (pour la migration des anciennes clés)
 const DISPLAY_BY_NORM = new Map(ALL_CARDS.map(c => [normKey(c.name), c.name]));
