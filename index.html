@@ -1033,7 +1033,6 @@ function Collection() {
         <div className="mb-4 text-sm text-slate-400">
           <span className="text-emerald-400 font-semibold">{cards.reduce((count, card) => count + (ownedNames.has(card.name) ? 1 : 0), 0)}</span>
           {" "}/ {cards.length} cartes affichées avec variantes
-          {" "}<span className="text-slate-500">— {ALL_CARDS.length} cartes au total dans la collection</span>
           {" "}<span className="text-slate-500">— <span className="text-cyan-300 font-semibold">{globalNumbers.owned}</span> / {globalNumbers.total} numéros de cartes au total</span>
         </div>
 
