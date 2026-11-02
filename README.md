@@ -7,7 +7,12 @@ se qui était une bonne idée voila une version aboutis mais pas finale.
 
 Je continuerais de l'améliorer à l'aide de vos retours.
 
+Lien vers la page du site: https://craken83.github.io/Vgachacardex/
+
 # Documentation
+
+## Utilisation
+  * le plus sur les cartes pour ajouter ou cliquer sur la carte pour une interface plus interactive
 
 ## Les données
   * Elle sont stockées en local sur votre navigateur donc vous n'etes pas obliger d'installer l'application
