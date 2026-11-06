@@ -142,7 +142,7 @@ const FILTRES = {
     "Lumiole",    "Miel Crapouille",    "Aera",    "Layunara",
     "shuta_saori",    "Veyx",    "Isesi_VT",    "Dr_Rehkpe",
     "Lady Gwendoline",    "Zai",    "nemu*",    "Zuto_Ketchup",
-    "Physalia Nox",
+    "Physalia Nox",    "Aithrisch",    "Damnyts",
   ],
   "Eikyuu Hours": [
     "Aoi Nipi",    "Hana Momiji",    "Lazurine",    "Manaryuujin",
@@ -405,6 +405,7 @@ const BASE = [
     "Squoye",    "Aera",    "Layunara",    "shuta_saori",
     "Veyx",    "Isesi_VT",    "Dr_Rehkpe",    "Lady Gwendoline",
     "Zai",    "nemu*",    "Zuto_Ketchup",    "Physalia Nox",
+    "Aithrisch",    "Damnyts",
 ];
 
 const SR = [
