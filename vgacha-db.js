@@ -141,7 +141,8 @@ const FILTRES = {
     "Lywen.exe",    "Meizy_11",    "Yuki Starz",    "kytaryo",
     "Lumiole",    "Miel Crapouille",    "Aera",    "Layunara",
     "shuta_saori",    "Veyx",    "Isesi_VT",    "Dr_Rehkpe",
-    "Lady Gwendoline",    "Zai",    "nemu*",
+    "Lady Gwendoline",    "Zai",    "nemu*",    "Zuto_Ketchup",
+    "Physalia Nox",
   ],
   "Eikyuu Hours": [
     "Aoi Nipi",    "Hana Momiji",    "Lazurine",    "Manaryuujin",
@@ -403,7 +404,7 @@ const BASE = [
     "Ayame Sato",    "Miaoutick",    "Amelyas Addams",    "AzeriaSis",
     "Squoye",    "Aera",    "Layunara",    "shuta_saori",
     "Veyx",    "Isesi_VT",    "Dr_Rehkpe",    "Lady Gwendoline",
-    "Zai",    "nemu*",
+    "Zai",    "nemu*",    "Zuto_Ketchup",    "Physalia Nox",
 ];
 
 const SR = [
