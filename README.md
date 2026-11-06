@@ -7,9 +7,15 @@ se qui était une bonne idée voila une version aboutis mais pas finale.
 
 Je continuerais de l'améliorer à l'aide de vos retours.
 
+Lien vers la page du site: https://craken83.github.io/Vgachacardex/
+
 # Documentation
 
-## Les données
+## Utilisation
+  * pour ajouter une cartes cliquer sur le plus ou sur la carte elle meme pour une interface plus interactive/intuitive 
+
+## progression
+
   * Elle sont stockées en local sur votre navigateur donc vous n'etes pas obliger d'installer l'application
      * cependant si vous ouvrez une premiere fois sur Chrome puis passe sur Firefox les donner ne seront pas transmise.
   * Vous pouvais donc les importer ou exporter via le menu burger en haut a droite (les 3 barres horizontals).
