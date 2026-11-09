@@ -143,7 +143,8 @@ const FILTRES = {
     "shuta_saori",    "Veyx",    "Isesi_VT",    "Dr_Rehkpe",
     "Lady Gwendoline",    "Zai",    "nemu*",    "Zuto_Ketchup",
     "Physalia Nox",    "Aithrisch",    "Damnyts",    "Vicky Frenzy",
-    "Hdrd28",    "FewCactus9343",    "VulkaeWorld",
+    "Hdrd28",    "FewCactus9343",    "VulkaeWorld",    "Rei Jyun",
+    "Sunny__vt",
   ],
   "Eikyuu Hours": [
     "Aoi Nipi",    "Hana Momiji",    "Lazurine",    "Manaryuujin",
@@ -408,7 +409,7 @@ const BASE = [
     "Veyx",    "Isesi_VT",    "Dr_Rehkpe",    "Lady Gwendoline",
     "Zai",    "nemu*",    "Zuto_Ketchup",    "Physalia Nox",
     "Aithrisch",    "Damnyts",    "Vicky Frenzy",    "Hdrd28",
-    "FewCactus9343",    "VulkaeWorld",
+    "FewCactus9343",    "VulkaeWorld",    "Rei Jyun",    "Sunny__vt",
 ];
 
 const SR = [
