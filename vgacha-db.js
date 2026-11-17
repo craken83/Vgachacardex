@@ -145,7 +145,7 @@ const FILTRES = {
     "Physalia Nox",    "Aithrisch",    "Damnyts",    "Vicky Frenzy",
     "Hdrd28",    "FewCactus9343",    "VulkaeWorld",    "Rei Jyun",
     "Sunny__vt",    "Hney_bunny",    "Herion Amadeus",    "Yuhxace",
-    "Chips",
+    "Chips",    "ShinyaKohane",
   ],
   "Eikyuu Hours": [
     "Aoi Nipi",    "Hana Momiji",    "Lazurine",    "Manaryuujin",
@@ -175,7 +175,7 @@ const FILTRES = {
     "AngeCeleste",    "Elyxia",    "Hana Momiji",    "Hiwamari",
     "KatChan",    "Keola",    "Niyonko",    "Ryushi",
     "Sheiyah Sorai",    "Xen Acedia",    "Yhusky",    "Yami_Shin",
-    "Numia__",    "Miel Crapouille",    "Amelyas Addams",
+    "Numia__",    "Miel Crapouille",    "Amelyas Addams",    "ShinyaKohane",
   ],
   "Saint-Valentin": [
     "AngeCeleste",    "Hana Momiji",    "LilouSurTwitch",    "Etoily",
@@ -215,6 +215,7 @@ const FILTRES = {
     "Hiwamari",    "KatChan",    "Keola",    "Niyonko",
     "Ryushi",    "Sheiyah Sorai",    "Xen Acedia",    "Yhusky",
     "Yami_Shin",    "Numia__",    "Miel Crapouille",    "Amelyas Addams",
+    "ShinyaKohane",
   ],
   "Fluff Event 2026": [
     "AliiceXIV",    "Ashley Plateada",    "AshySlashii",    "Asphalte",
@@ -412,6 +413,7 @@ const BASE = [
     "Aithrisch",    "Damnyts",    "Vicky Frenzy",    "Hdrd28",
     "FewCactus9343",    "VulkaeWorld",    "Rei Jyun",    "Sunny__vt",
     "Hney_bunny",    "Herion Amadeus",    "Yuhxace",    "Chips",
+    "ShinyaKohane",
 ];
 
 const SR = [
@@ -419,6 +421,7 @@ const SR = [
     "SR-Hiwamari",    "SR-KatChan",    "SR-Keola",    "SR-Niyonko",
     "SR-Ryushi",    "SR-Sheiyah Sorai",    "SR-Xen Acedia",    "SR-Yhusky",
     "SR-Yami_Shin",    "SR-Numia__",    "SR-Miel Crapouille",    "SR-Amelyas Addams",
+    "SR-ShinyaKohane",
 ];
 
 const SSR = [
@@ -426,6 +429,7 @@ const SSR = [
     "SSR-Hiwamari",    "SSR-KatChan",    "SSR-Keola",    "SSR-Niyonko",
     "SSR-Ryushi",    "SSR-Sheiyah Sorai",    "SSR-Xen Acedia",    "SSR-Yhusky",
     "SSR-Yami_Shin",    "SSR-Numia__",    "SSR-Miel Crapouille",    "SSR-Amelyas Addams",
+    "SSR-ShinyaKohane",
 ];
 
 const UR = [
@@ -481,7 +485,7 @@ const SECTIONS_DB = {
     "AngeCeleste",    "Elyxia",    "Hana Momiji",    "Hiwamari",
     "KatChan",    "Keola",    "Niyonko",    "Ryushi",
     "Sheiyah Sorai",    "Xen Acedia",    "Yhusky",    "Yami_Shin",
-    "Numia__",    "Miel Crapouille",    "Amelyas Addams",
+    "Numia__",    "Miel Crapouille",    "Amelyas Addams",    "ShinyaKohane",
   ],
   "Eikyuu Hours Signed": [
     "Aoi Nipi",    "Hana Momiji",    "Lazurine",    "Manaryuujin",
