@@ -146,6 +146,7 @@ const FILTRES = {
     "Hdrd28",    "FewCactus9343",    "VulkaeWorld",    "Rei Jyun",
     "Sunny__vt",    "Hney_bunny",    "Herion Amadeus",    "Yuhxace",
     "Chips",    "ShinyaKohane",    "Sura1ki",    "Echo",
+    "Hapyck_G",
   ],
   "Eikyuu Hours": [
     "Aoi Nipi",    "Hana Momiji",    "Lazurine",    "Manaryuujin",
@@ -172,10 +173,11 @@ const FILTRES = {
     "StanRenart",    "Miel Crapouille",
   ],
   "Signed Fullart": [
-    "AngeCeleste",    "Elyxia",    "Hana Momiji",    "Hiwamari",
-    "KatChan",    "Keola",    "Niyonko",    "Ryushi",
-    "Sheiyah Sorai",    "Xen Acedia",    "Yhusky",    "Yami_Shin",
-    "Numia__",    "Miel Crapouille",    "Amelyas Addams",    "ShinyaKohane",
+    "AngeCeleste",    "Aurenn Dwargon",    "Elyxia",    "Hana Momiji",
+    "Hiwamari",    "KatChan",    "Keola",    "Niyonko",
+    "Ryushi",    "Sheiyah Sorai",    "Xen Acedia",    "Yhusky",
+    "Yami_Shin",    "Numia__",    "Miel Crapouille",    "Amelyas Addams",
+    "ShinyaKohane",
   ],
   "Saint-Valentin": [
     "AngeCeleste",    "Hana Momiji",    "LilouSurTwitch",    "Etoily",
@@ -211,11 +213,11 @@ const FILTRES = {
     "Mellumine",    "Nia",
   ],
   "Fullart": [
-    "Akage Alice",    "AngeCeleste",    "Elyxia",    "Hana Momiji",
-    "Hiwamari",    "KatChan",    "Keola",    "Niyonko",
-    "Ryushi",    "Sheiyah Sorai",    "Xen Acedia",    "Yhusky",
-    "Yami_Shin",    "Numia__",    "Miel Crapouille",    "Amelyas Addams",
-    "ShinyaKohane",
+    "Akage Alice",    "AngeCeleste",    "Aurenn Dwargon",    "Elyxia",
+    "Hana Momiji",    "Hiwamari",    "KatChan",    "Keola",
+    "Niyonko",    "Ryushi",    "Sheiyah Sorai",    "Xen Acedia",
+    "Yhusky",    "Yami_Shin",    "Numia__",    "Miel Crapouille",
+    "Amelyas Addams",    "ShinyaKohane",
   ],
   "Fluff Event 2026": [
     "AliiceXIV",    "Ashley Plateada",    "AshySlashii",    "Asphalte",
@@ -413,7 +415,7 @@ const BASE = [
     "Aithrisch",    "Damnyts",    "Vicky Frenzy",    "Hdrd28",
     "FewCactus9343",    "VulkaeWorld",    "Rei Jyun",    "Sunny__vt",
     "Hney_bunny",    "Herion Amadeus",    "Yuhxace",    "Chips",
-    "ShinyaKohane",    "Sura1ki",    "Echo",
+    "ShinyaKohane",    "Sura1ki",    "Echo",    "Hapyck_G",
 ];
 
 const SR = [
@@ -482,10 +484,11 @@ const SECTIONS_DB = {
     "Chowco",    "Kokoa Nemuzuki",    "Aquakwa",    "Vega",
   ],
   "Signed Fullart": [
-    "AngeCeleste",    "Elyxia",    "Hana Momiji",    "Hiwamari",
-    "KatChan",    "Keola",    "Niyonko",    "Ryushi",
-    "Sheiyah Sorai",    "Xen Acedia",    "Yhusky",    "Yami_Shin",
-    "Numia__",    "Miel Crapouille",    "Amelyas Addams",    "ShinyaKohane",
+    "AngeCeleste",    "Aurenn Dwargon",    "Elyxia",    "Hana Momiji",
+    "Hiwamari",    "KatChan",    "Keola",    "Niyonko",
+    "Ryushi",    "Sheiyah Sorai",    "Xen Acedia",    "Yhusky",
+    "Yami_Shin",    "Numia__",    "Miel Crapouille",    "Amelyas Addams",
+    "ShinyaKohane",
   ],
   "Eikyuu Hours Signed": [
     "Aoi Nipi",    "Hana Momiji",    "Lazurine",    "Manaryuujin",
