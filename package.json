@@ -1,0 +1,15 @@
+{
+  "name": "vgacha",
+  "private": true,
+  "version": "2.0.0",
+  "description": "VGacha — suivi de collection de cartes",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwindcss": "^4.3.0"
+  }
+}
