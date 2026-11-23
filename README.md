@@ -1,25 +1,41 @@
-# Introduction
-Vgachacardex a était réaliser à l'aide de l'ia "Mistral AI" en version gratuite.
+# VGacha
 
-A la base se projet partait d'un tableur 
-et a un moment il as décidé que c'etait mieux de le faire en site sans me le demander
-se qui était une bonne idée voila une version aboutis mais pas finale.
+Suivi de collection de cartes VGacha (collection + panel admin), 100 % côté navigateur : aucun serveur, aucun compte.
 
-Je continuerais de l'améliorer à l'aide de vos retours.
+## Mettre en ligne sur GitHub Pages
 
-Lien vers la page du site: https://craken83.github.io/Vgachacardex/
+1. Crée un dépôt GitHub et envoie-y **tous les fichiers de ce dossier** (sauf `node_modules`, déjà ignoré).
+2. Dans le dépôt : **Settings → Pages → Build and deployment → Deploy from a branch → `main` / `(root)`**.
+3. Le site est disponible à l'adresse `https://<ton-pseudo>.github.io/<nom-du-depot>/`.
 
-# Documentation
+Aucune étape de build n'est nécessaire pour publier : `app.js` et `style.css` sont déjà générés.
 
-## Utilisation
-  * pour ajouter une cartes cliquer sur le plus ou sur la carte elle meme pour une interface plus interactive/intuitive 
+## Fichiers
 
-## progression
+| Fichier | Rôle |
+|---|---|
+| `index.html` | Page (charge uniquement des fichiers du site, rien d'externe) |
+| `vgacha-db.js` | La base : cartes, raretés, séries, cadres. C'est ce fichier que l'admin exporte |
+| `app.js`, `style.css` | Code et styles **générés** (ne pas modifier à la main) |
+| `src/app.jsx` | Le code source de l'application |
+| `build.mjs`, `package.json` | Reconstruction de `app.js` et `style.css` |
 
-  * Elle sont stockées en local sur votre navigateur donc vous n'etes pas obliger d'installer l'application
-     * cependant si vous ouvrez une premiere fois sur Chrome puis passe sur Firefox les donner ne seront pas transmise.
-  * Vous pouvais donc les importer ou exporter via le menu burger en haut a droite (les 3 barres horizontals).
+## Mettre à jour la base (panel admin)
 
-## Panel Admin
-Son utilité est pour ce qui telecharge l'app 
-  * Permet d'ajouter, retirer des personages ou series et d'exporter la nouvelle base de données mise à jour
+1. Ouvre le site, onglet **Admin**, fais tes modifications (elles s'affichent tout de suite dans ton navigateur).
+2. Onglet **Exporter → Télécharger `vgacha-db.js`**.
+3. Remplace `vgacha-db.js` dans le dépôt, puis commit et push. Le site public se met à jour.
+
+Important : n'importe quel visiteur peut ouvrir l'onglet Admin, mais ses modifications restent dans son propre navigateur. Seul le `vgacha-db.js` que tu publies change le site pour tout le monde.
+
+## Progression
+
+Elle est enregistrée dans le navigateur de chaque visiteur (`localStorage`). Menu ☰ : exporter, importer (fusion) ou lier un fichier `vgacha-progression.js`. Ce fichier est ignoré par git (`.gitignore`) : ne le publie pas si tu veux garder ta collection privée.
+
+## Modifier le code
+
+```
+npm install
+npm run build
+```
+puis commit `app.js` et `style.css` avec tes changements de `src/app.jsx`.
