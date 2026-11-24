@@ -1,11 +1,6 @@
-/* VGacha — base de données (v2). Générée par le panel admin (onglet Exporter) : peut aussi s'éditer à la main.
-   - rarities : tags de rareté (prefix = ancien préfixe des pseudos ; chip:false = pas de bouton de filtre ; series = série impliquée)
-   - sections : cadres/collections affichés sur les cartes (count = nombre de numéros ; all = pour toutes les cartes ;
-                sinon seulement les cartes qui l'ont dans leur liste "sections" ; rule = cochage auto dans l'admin ; bonus = +1 pour bonusCards)
-   - series   : boutons de filtre, dans l'ordre d'affichage (sections = cadres comptés pour "possédées / total" ; hidden = pas de bouton)
-   - cards    : une ligne par personne (pseudo, raretés, séries, sections restreintes)                                              */
+/* VGacha — base de données (v2), exportée depuis le panel admin. Voir la structure : rarities / sections / series / cards. */
 window.VGACHA_DB = {
-  rev: "mwt5yac4",
+  rev: "mwv8fcij",
   rarities: [
     {"key":"Base","prefix":""},
     {"key":"SR","prefix":"SR-"},
@@ -27,11 +22,11 @@ window.VGACHA_DB = {
     {"key":"VTA25","count":1,"color":"#16a34a","rule":{"series":"VTA 2025"}},
     {"key":"St-Valentin","count":1,"color":"#db2777","all":true},
     {"key":"Fullart","count":1,"color":"#14b8a6","rule":{"series":"Fullart"},"bonus":true},
-    {"key":"GraVty","count":1,"color":"#0ea5e9","rule":{"series":"GraVty","rarities":["UR"]}},
     {"key":"Signed Fullart","count":1,"color":"#2dd4bf","rule":{"series":"Signed Fullart","rarities":["SSR"]},"bonus":true},
+    {"key":"GraVty","count":1,"color":"#0ea5e9","rule":{"series":"GraVty","rarities":["UR"]}},
+    {"key":"Signed GraVty","count":1,"color":"#38bdf8","rule":{"series":"Signed GraVty","rarities":["SEC"]}},
     {"key":"Eikyuu Hours","count":1,"color":"#a78bfa","rule":{"series":"Eikyuu Hours","rarities":["UR"]}},
     {"key":"Eikyuu Hours Signed","count":1,"color":"#c084fc","rule":{"series":"Eikyuu Hours Signed","rarities":["SEC"]}},
-    {"key":"Signed GraVty","count":1,"color":"#38bdf8","rule":{"series":"Signed GraVty","rarities":["SEC"]}},
     {"key":"Blue & Gold","count":1,"color":"#f59e0b","rule":{"series":"Blue & Gold","rarities":["UR"]}},
     {"key":"Signed Blue & Gold","count":1,"color":"#fbbf24","rule":{"series":"Signed Blue & Gold","rarities":["SEC"]}},
     {"key":"Vecordia","count":1,"color":"#ec4899","rule":{"series":"Vecordia","rarities":["UR"]}},
@@ -717,6 +712,7 @@ window.VGACHA_DB = {
     {"name":"Zaledia_","rarities":["Base"],"series":["Base"],"sections":[]},
     {"name":"Zaph","rarities":["Base"],"series":["Base"],"sections":[]},
     {"name":"Zuto_Ketchup","rarities":["Base"],"series":["Base"],"sections":[]},
-    {"name":"Zwar_Vtuber","rarities":["Base"],"series":["Base"],"sections":[]}
+    {"name":"Zwar_Vtuber","rarities":["Base"],"series":["Base"],"sections":[]},
+    {"name":"AthemosVT","rarities":["Base"],"series":["Base"],"sections":[]}
   ],
 };
