@@ -1,25 +1,34 @@
-# Introduction
-Vgachacardex a était réaliser à l'aide de l'ia "Mistral AI" en version gratuite.
+# VGacha (version sans panel admin)
 
-A la base se projet partait d'un tableur 
-et a un moment il as décidé que c'etait mieux de le faire en site sans me le demander
-se qui était une bonne idée voila une version aboutis mais pas finale.
+Suivi de collection de cartes VGacha, 100 % côté navigateur : aucun serveur, aucun compte.
 
-Je continuerais de l'améliorer à l'aide de vos retours.
+## Mettre en ligne sur GitHub Pages
 
-Lien vers la page du site: https://craken83.github.io/Vgachacardex/
+1. Crée un dépôt GitHub et envoie-y tous les fichiers de ce dossier (sauf `node_modules`, déjà ignoré).
+2. **Settings → Pages → Deploy from a branch → `main` / `(root)`**.
+3. Le site est disponible à `https://<ton-pseudo>.github.io/<nom-du-depot>/`.
 
-# Documentation
+Aucun build n'est nécessaire pour publier. Indispensables : `index.html`, `vendor.js`, `app.js`, `style.css`, `vgacha-db.js`.
 
-## Utilisation
-  * pour ajouter une cartes cliquer sur le plus ou sur la carte elle meme pour une interface plus interactive/intuitive 
+## Fonctions
 
-## progression
+- Filtres rareté / série, recherche, tri (alphabétique, nombre de cartes, complétion %), boutons Possédé / Non possédé.
+- Vue Pokecardex d'une carte : clic sur un numéro, ou saisie de plages (`1-20, 35, 40-50`) avec Cocher / Décocher.
+- **Annuler** (bouton ou Ctrl+Z) : revient sur les 50 dernières actions.
+- **Copier les manquantes** : liste de ce qu'il te manque, pour les cartes affichées (selon les filtres) ou pour une seule carte depuis sa popup.
+- Menu ☰ : exporter / importer (fusion) / lier un fichier `vgacha-progression.js` (ignoré par git).
 
-  * Elle sont stockées en local sur votre navigateur donc vous n'etes pas obliger d'installer l'application
-     * cependant si vous ouvrez une premiere fois sur Chrome puis passe sur Firefox les donner ne seront pas transmise.
-  * Vous pouvais donc les importer ou exporter via le menu burger en haut a droite (les 3 barres horizontals).
+## Modifier la base de cartes
 
-## Panel Admin
-Son utilité est pour ce qui telecharge l'app 
-  * Permet d'ajouter, retirer des personages ou series et d'exporter la nouvelle base de données mise à jour
+Pas d'admin dans cette version : édite `vgacha-db.js` à la main (une ligne par personne dans `cards`, avec ses `rarities`, `series` et `sections`), puis commit et push. L'en-tête du fichier explique la structure.
+
+## Fichiers
+
+| Fichier | Rôle |
+|---|---|
+| `index.html` | Page (aucune ressource externe) |
+| `vgacha-db.js` | La base : cartes, raretés, séries, cadres |
+| `app.js` | Code de l'application, lisible (généré depuis `src/app.jsx`) |
+| `vendor.js` | React, minifié |
+| `style.css` | Styles Tailwind générés |
+| `src/app.jsx`, `build.mjs`, `package.json` | Source et reconstruction (`npm install` puis `npm run build`) |
