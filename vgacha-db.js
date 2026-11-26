@@ -1,6 +1,6 @@
 /* VGacha — base de données (v2), exportée depuis le panel admin. Voir la structure : rarities / sections / series / cards. */
 window.VGACHA_DB = {
-  rev: "mwv8fcij",
+  rev: "mwx04s32",
   rarities: [
     {"key":"Base","prefix":""},
     {"key":"SR","prefix":"SR-"},
@@ -676,7 +676,7 @@ window.VGACHA_DB = {
     {"name":"Volpoune","rarities":["Base","ZEVENT"],"series":["Base","Zevent","Fluff Event 2026"],"sections":["Zevent","Fluff Event 2026"]},
     {"name":"VTYukiUwU","rarities":["Base"],"series":["Base"],"sections":[]},
     {"name":"Vulcainos","rarities":["Base"],"series":["Base"],"sections":[]},
-    {"name":"VulkaeWorld","rarities":["Base"],"series":["Base"],"sections":[]},
+    {"name":"Vulkae","rarities":["Base"],"series":["Base"],"sections":[]},
     {"name":"Waffu","rarities":["Base"],"series":["Base"],"sections":[]},
     {"name":"Wicked Fox","rarities":["Base"],"series":["Fluff Event 2026"],"sections":["Fluff Event 2026"]},
     {"name":"Wigfire","rarities":["Base"],"series":["Base"],"sections":[]},
