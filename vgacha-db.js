@@ -1,6 +1,6 @@
 /* VGacha — base de données (v2), exportée depuis le panel admin. Voir la structure : rarities / sections / series / cards. */
 window.VGACHA_DB = {
-  rev: "mwx04s32",
+  rev: "mwxo3bf9",
   rarities: [
     {"key":"Base","prefix":""},
     {"key":"SR","prefix":"SR-"},
@@ -713,6 +713,7 @@ window.VGACHA_DB = {
     {"name":"Zaph","rarities":["Base"],"series":["Base"],"sections":[]},
     {"name":"Zuto_Ketchup","rarities":["Base"],"series":["Base"],"sections":[]},
     {"name":"Zwar_Vtuber","rarities":["Base"],"series":["Base"],"sections":[]},
-    {"name":"AthemosVT","rarities":["Base"],"series":["Base"],"sections":[]}
+    {"name":"AthemosVT","rarities":["Base"],"series":["Base"],"sections":[]},
+    {"name":"Astreachan","rarities":["Base"],"series":["Base"],"sections":[]}
   ],
 };
